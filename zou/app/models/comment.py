@@ -87,6 +87,9 @@ class Comment(db.Model, BaseMixin, SerializerMixin):
     preview_file_id = db.Column(
         UUIDType(binary=False), db.ForeignKey("preview_file.id")
     )
+    previews = db.relationship(
+        "PreviewFile", secondary=preview_link_table, backref="comments"
+    )
     mentions = db.relationship("Person", secondary=mentions_table)
     acknowledgements = db.relationship(
         "Person", secondary=acknowledgements_table

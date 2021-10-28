@@ -133,7 +133,12 @@ class Shot(SQLAlchemyObjectType):
     )
     sequence = graphene.Field(
         "zou.app.graphql.schema.Sequence",
-        resolver=DefaultResolver(EntityModel, foreign_key="id", parent_key="parent_id", query_all=False),
+        resolver=DefaultResolver(
+            EntityModel,
+            foreign_key="id",
+            parent_key="parent_id",
+            query_all=False,
+        ),
     )
 
 
@@ -167,6 +172,12 @@ class Asset(SQLAlchemyObjectType):
         PreviewFile,
         resolver=DefaultResolver(
             PreviewFileModel, "id", "preview_file_id", query_all=False
+        ),
+    )
+    entity_type = graphene.Field(
+        EntityType,
+        resolver=DefaultResolver(
+            EntityTypeModel, "id", "entity_type_id", query_all=False
         ),
     )
 

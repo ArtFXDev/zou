@@ -7,6 +7,7 @@ import datetime
 
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE
 from zou.app.utils import thumbnail as thumbnail_utils
+from zou.app.utils import auth
 from zou.app.stores import auth_tokens_store, file_store
 from zou.app.services import (
     assets_service,
@@ -453,3 +454,7 @@ def remove_old_data(days_old=90):
     print("Removing old notitfications...")
     deletion_service.remove_old_notifications(days_old)
     print("Old data removed.")
+
+def reset_user_password(user_email):
+    password = auth.encrypt_password("default")
+    persons_service.update_password(user_email, password)

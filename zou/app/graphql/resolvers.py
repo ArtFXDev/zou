@@ -133,6 +133,13 @@ class FieldResolver(DefaultResolver):
         self.query_all = False
         self.call = call
 
+    def apply_filter(self, query, **kwargs):
+        if kwargs.get("id") is None:
+            return query
+
+        query = query.filter(self.model_type.id == kwargs.get("id"))
+        return query
+
     def __call__(self, root, info, **kwargs):
-        result = super().__call__(root, info, **kwargs)
+        result = super().__call__(root, info, id=root.id)
         return self.call(result)

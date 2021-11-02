@@ -337,5 +337,14 @@ def remove_old_data(days):
     commands.remove_old_data(days)
 
 
+@cli.command()
+@click.option("--user")
+def reset_user_password(user):
+    """
+    Reset a password for the given user email to default
+    """
+    commands.reset_user_password(user)
+
+
 if __name__ == "__main__":
     cli()

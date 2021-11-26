@@ -79,6 +79,7 @@ class Entity(db.Model, BaseMixin, SerializerMixin):
     canceled = db.Column(db.Boolean, default=False)
 
     nb_frames = db.Column(db.Integer)  # Specific to shots
+    nb_entities_out = db.Column(db.Integer, default=0)
 
     project_id = db.Column(
         UUIDType(binary=False),
@@ -109,6 +110,11 @@ class Entity(db.Model, BaseMixin, SerializerMixin):
         db.ForeignKey("preview_file.id", name="fk_main_preview"),
     )
     data = db.Column(JSONB)
+
+    ready_for = db.Column(
+        UUIDType(binary=False),
+        db.ForeignKey("task_type.id", name="fk_ready_for"),
+    )
 
     entities_out = db.relationship(
         "Entity",

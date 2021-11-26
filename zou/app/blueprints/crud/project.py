@@ -55,6 +55,13 @@ class ProjectResource(BaseModelResource):
     def check_read_permissions(self, project):
         user_service.check_project_access(project["id"])
 
+    def pre_update(self, project_dict, data):
+        data.pop("team", [])
+        data.pop("asset_types", [])
+        data.pop("task_statuses", [])
+        data.pop("task_types", [])
+        return project_dict
+
     def post_update(self, project_dict):
         if project_dict["production_type"] == "tvshow":
             episode = shots_service.get_or_create_first_episode(

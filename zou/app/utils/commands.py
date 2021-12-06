@@ -290,6 +290,7 @@ def sync_with_ldap_server():
 
             elif person is not None:
                 try:
+                    active = True
                     persons_service.update_person(
                         person["id"],
                         {

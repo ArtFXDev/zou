@@ -240,7 +240,7 @@ class CreateShotTaskResource(Resource):
         task_type = tasks_service.get_task_type(task_type_id)
 
         shot_id = request.json["shot"]
-        task_name = request.json["name"]
+        task_name = request.json.get("name", "main")
 
         shot = shots_service.get_shot(shot_id)
         if shot["project_id"] != project_id:
@@ -290,7 +290,7 @@ class CreateAssetTaskResource(Resource):
         task_type = tasks_service.get_task_type(task_type_id)
 
         asset_id = request.json["shot"]
-        task_name = request.json["name"]
+        task_name = request.json.get("name", "main")
 
         asset = assets_service.get_asset(asset_id)
         if asset["project_id"] == project_id:

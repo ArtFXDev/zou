@@ -229,6 +229,30 @@ class CreateShotTasksResource(Resource):
         return tasks, 201
 
 
+class CreateShotTaskResource(Resource):
+    """
+    Create a new task for given shot and task type.
+    """
+
+    @jwt_required
+    def post(self, project_id, task_type_id):
+        user_service.check_manager_project_access(project_id)
+        task_type = tasks_service.get_task_type(task_type_id)
+
+        shot_id = request.json["shot"]
+        task_name = request.json["name"]
+
+        shot = shots_service.get_shot(shot_id)
+        if shot["project_id"] != project_id:
+            return {
+                "error": True,
+                "message": "The given shot does not belong to your project.",
+            }, 400
+
+        tasks = tasks_service.create_task(task_type, shot, task_name)
+        return tasks, 201
+
+
 class CreateAssetTasksResource(Resource):
     """
     Create a new task for given asset and task type.
@@ -252,6 +276,30 @@ class CreateAssetTasksResource(Resource):
             assets = assets_service.get_assets(criterions)
 
         tasks = tasks_service.create_tasks(task_type, assets)
+        return tasks, 201
+
+
+class CreateAssetTaskResource(Resource):
+    """
+    Create a new task for given shot and task type.
+    """
+
+    @jwt_required
+    def post(self, project_id, task_type_id):
+        user_service.check_manager_project_access(project_id)
+        task_type = tasks_service.get_task_type(task_type_id)
+
+        asset_id = request.json["shot"]
+        task_name = request.json["name"]
+
+        asset = assets_service.get_asset(asset_id)
+        if asset["project_id"] == project_id:
+            return {
+                "error": True,
+                "message": "The given shot does not belong to your project.",
+            }, 400
+
+        tasks = tasks_service.create_task(task_type, asset, task_name)
         return tasks, 201
 
 
@@ -368,8 +416,7 @@ class TasksAssignResource(Resource):
         for task_id in task_ids:
             try:
                 user_service.check_project_departement_access(
-                    task_id,
-                    person_id
+                    task_id, person_id
                 )
                 task = self.assign_task(task_id, person_id)
                 author = persons_service.get_current_user()

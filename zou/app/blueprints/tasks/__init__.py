@@ -25,7 +25,9 @@ from .resources import (
     ProjectSubscriptionsResource,
     ProjectTasksResource,
     CreateShotTasksResource,
+    CreateShotTaskResource,
     CreateAssetTasksResource,
+    CreateAssetTaskResource,
     GetTimeSpentResource,
     SetTimeSpentResource,
     AddTimeSpentResource,
@@ -94,8 +96,16 @@ routes = [
         CreateShotTasksResource,
     ),
     (
+        "/actions/projects/<project_id>/task-types/<task_type_id>/shots/create-task",
+        CreateShotTaskResource,
+    ),
+    (
         "/actions/projects/<project_id>/task-types/<task_type_id>/assets/create-tasks",
         CreateAssetTasksResource,
+    ),
+    (
+        "/actions/projects/<project_id>/task-types/<task_type_id>/assets/create-task",
+        CreateAssetTaskResource,
     ),
 ]
 

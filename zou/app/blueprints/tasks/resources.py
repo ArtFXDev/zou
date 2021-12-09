@@ -293,7 +293,7 @@ class CreateAssetTaskResource(Resource):
         task_name = request.json.get("name", "main")
 
         asset = assets_service.get_asset(asset_id)
-        if asset["project_id"] == project_id:
+        if asset["project_id"] != project_id:
             return {
                 "error": True,
                 "message": "The given shot does not belong to your project.",

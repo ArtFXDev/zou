@@ -131,7 +131,7 @@ def _manage_subscriptions(task, comment, status_changed):
         task, comment, change=status_changed
     )
     news_service.create_news_for_task_and_comment(
-        task, comment, change=status_changed
+        task, comment, created_at=comment["created_at"], change=status_changed
     )
 
 
@@ -157,7 +157,12 @@ def new_comment(
                 created_at, date_format="%Y-%m-%d %H:%M:%S"
             )
         except ValueError:
-            pass
+            try:
+                created_at_date = fields.get_date_object(
+                    created_at, date_format="%Y-%m-%dT%H:%M:%S"
+                )
+            except ValueError:
+                pass
 
     comment = Comment.create(
         object_id=task_id,
@@ -171,16 +176,24 @@ def new_comment(
     )
 
     comment = comment.serialize(relations=True)
-    comment["attachment_files"] = []
-    for uploaded_file in files.values():
-        attachment_file = create_attachment(comment, uploaded_file)
-        comment["attachment_files"].append(attachment_file)
-
+    add_attachments_to_comment(comment, files)
     events.emit(
         "comment:new",
         {"comment_id": comment["id"], "task_id": task_id},
         project_id=task["project_id"],
     )
+    return comment
+
+
+def add_attachments_to_comment(comment, files):
+    """
+    Create an attachment entry and for each given uploaded files and tie it
+    to given comment.
+    """
+    comment["attachment_files"] = []
+    for uploaded_file in files.values():
+        attachment_file = create_attachment(comment, uploaded_file)
+        comment["attachment_files"].append(attachment_file)
     return comment
 
 

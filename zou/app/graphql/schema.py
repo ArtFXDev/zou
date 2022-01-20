@@ -88,7 +88,13 @@ class Task(SQLAlchemyObjectType):
 
     previews = graphene.List(
         PreviewFile,
-        resolver=DefaultResolver(PreviewFileModel, "task_id"),
+        resolver=DefaultResolver(PreviewFileModel, "task_id", order_by="revision"),
+    )
+    entity = graphene.Field(
+        "zou.app.graphql.schema.Entity",
+        resolver=DefaultResolver(
+            EntityModel, "id", "entity_id", query_all=False
+        ),
     )
     taskStatus = graphene.Field(
         TaskStatus,
@@ -181,6 +187,9 @@ class Asset(SQLAlchemyObjectType):
         ),
     )
 
+class Entity(graphene.Union):
+    class Meta:
+        types = (Shot, Asset)
 
 class ProjectStatus(SQLAlchemyObjectType):
     class Meta:

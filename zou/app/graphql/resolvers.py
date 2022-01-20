@@ -1,5 +1,6 @@
 from typing import Callable
 from zou.app import db
+from sqlalchemy import desc
 from zou.app.models.entity import Entity as EntityModel
 from zou.app.services import (
     entities_service,
@@ -14,11 +15,13 @@ class DefaultResolver:
         foreign_key: str = "",
         parent_key: str = "id",
         query_all: bool = True,
+        order_by: str = "",
     ):
         self.model_type = model_type
         self.foreign_key = foreign_key
         self.parent_key = parent_key
         self.query_all = query_all
+        self.order_by = order_by
 
     def get_query(self, root):
         query = self.model_type.query
@@ -33,6 +36,11 @@ class DefaultResolver:
         for filter_set in kwargs.get("filters", []):
             for key, value in filter_set.items():
                 query = query.filter(getattr(self.model_type, key) == value)
+
+        if self.order_by:
+            query = query.order_by(
+                desc(getattr(self.model_type, self.order_by))
+            )
 
         return query
 

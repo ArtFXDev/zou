@@ -30,6 +30,8 @@ from zou.app.graphql.resolvers import (
 )
 from zou.app.graphql import converters
 
+from zou.app.services.entities_service import get_entity_type
+
 
 class Software(SQLAlchemyObjectType):
     class Meta:
@@ -190,6 +192,16 @@ class Asset(SQLAlchemyObjectType):
 class Entity(graphene.Union):
     class Meta:
         types = (Shot, Asset)
+
+    @classmethod
+    def resolve_type(cls, instance, info):
+        entity_type = get_entity_type(instance.entity_type_id)
+        if entity_type["name"] == "Sequence":
+            return Sequence
+        elif entity_type["name"] == "Shot":
+            return Shot
+        else:
+            return Asset
 
 class ProjectStatus(SQLAlchemyObjectType):
     class Meta:

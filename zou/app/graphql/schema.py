@@ -6,6 +6,7 @@ from zou.app.models.working_file import WorkingFile as WorkingFileModel
 from zou.app.models.output_type import OutputType as OutputTypeModel
 from zou.app.models.output_file import OutputFile as OutputFileModel
 from zou.app.models.preview_file import PreviewFile as PreviewFileModel
+from zou.app.models.validation_record import ValidationRecord as ValidationRecordModel
 from zou.app.models.task_type import TaskType as TaskTypeModel
 from zou.app.models.task_status import TaskStatus as TaskStatusModel
 from zou.app.models.task import Task as TaskModel
@@ -62,6 +63,11 @@ class PreviewFile(SQLAlchemyObjectType):
         resolver=PreviewUrlResolver(lod="originals"),
         lod=graphene.String(required=False),
     )
+
+
+class ValidationRecord(SQLAlchemyObjectType):
+    class Meta:
+        model = ValidationRecordModel
 
 
 class Comment(SQLAlchemyObjectType):
@@ -147,6 +153,18 @@ class Shot(SQLAlchemyObjectType):
             parent_key="parent_id",
             query_all=False,
         ),
+    )
+    frame_in = graphene.Field(
+        graphene.JSONString,
+        resolver=FieldResolver(lambda x: x.data.get("frame_in"), EntityModel),
+    )
+    frame_out = graphene.Field(
+        graphene.JSONString,
+        resolver=FieldResolver(lambda x: x.data.get("frame_out"), EntityModel),
+    )
+    fps = graphene.Field(
+        graphene.JSONString,
+        resolver=FieldResolver(lambda x: x.data.get("fps"), EntityModel),
     )
 
 
@@ -235,6 +253,7 @@ class Department(SQLAlchemyObjectType):
 class Person(SQLAlchemyObjectType):
     class Meta:
         model = PersonModel
+        exclude_fields = ('password')
 
     comments = graphene.List(
         Comment,
@@ -282,6 +301,15 @@ class Query(graphene.ObjectType):
     preview_files = graphene.List(
         PreviewFile,
         resolver=DefaultResolver(PreviewFileModel),
+    )
+    validation_record = graphene.Field(
+        ValidationRecord,
+        resolver=DefaultResolver(ValidationRecord),
+    )
+    validation_records = graphene.List(
+        ValidationRecord,
+        resolver=IDResolver(ValidationRecord),
+        id=graphene.ID(),
     )
     task_type = graphene.Field(
         TaskType,

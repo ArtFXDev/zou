@@ -7,7 +7,7 @@ from fileseq import FrameSet
 from zou.app.utils import cache, events, fields, query as query_utils
 
 from zou.app.models.entity import Entity, EntityLink, EntityVersion
-from zou.app.models.progress_record import ProgressRecord
+from zou.app.models.validation_record import ValidationRecord
 from zou.app.models.project import Project
 from zou.app.models.schedule_item import ScheduleItem
 from zou.app.models.subscription import Subscription
@@ -356,14 +356,6 @@ def get_shot_raw(shot_id):
         raise ShotNotFoundException
 
     return shot
-
-
-def get_progress_record(progress_id):
-    """
-    Return given progress as an active record.
-    """
-    progress_record = ProgressRecord.get_by(id=progress_id)
-    return progress_record.serialize()
 
 
 @cache.memoize_function(120)
@@ -960,28 +952,6 @@ def create_shot(project_id, sequence_id, name, data={}, nb_frames=0):
     return shot.serialize(obj_type="Shot")
 
 
-def create_progress_record(shot_id, data={}):
-    """
-    Create progress record for given shot.
-    """
-    existing_progress = get_shot_raw(shot_id).progress
-    input_frame_set = FrameSet(data["value"])
-    frame_set = str(FrameSet(input_frame_set))
-
-    if existing_progress:
-        existing_frame_set = FrameSet(existing_progress[-1].value)
-        combined_frameset = list(input_frame_set) + list(existing_frame_set)
-        combined_frameset.sort()
-        frame_set = str(FrameSet(combined_frameset))
-
-    progress_record = ProgressRecord.create(
-        shot_id=shot_id,
-        value=frame_set
-    )
-
-    return progress_record.serialize()
-
-
 def create_scene(project_id, sequence_id, name):
     """
     Create scene for given project and sequence.
@@ -1047,3 +1017,35 @@ def get_base_entity_type_name(entity_dict):
     elif is_episode(entity_dict):
         type_name = "Episode"
     return type_name
+
+
+def get_validation_record(progress_id):
+    """
+    Return the progress as an active record.
+    """
+    validation_record = ValidationRecord.get_by(id=progress_id)
+    return validation_record.serialize()
+
+
+def create_validation_record(shot_id, data={}, substract=False):
+    """
+    Create progress record for given shot.
+    """
+    existing_validation = get_shot_raw(shot_id).validation_history
+    input_frame_set = FrameSet(data["frame_set"])
+    frame_set = str(FrameSet(input_frame_set))
+
+    if existing_validation:
+        existing_frame_set = FrameSet(existing_validation[-1].frame_set)
+        combined_frameset = list(input_frame_set) + list(existing_frame_set)
+        if substract:
+            combined_frameset = [frame for frame in existing_frame_set if frame not in input_frame_set]
+        combined_frameset.sort()
+        frame_set = str(FrameSet(combined_frameset))
+
+    validation_record = ValidationRecord.create(
+        shot_id=shot_id,
+        frame_set=frame_set
+    )
+
+    return validation_record.serialize()

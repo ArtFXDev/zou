@@ -80,7 +80,7 @@ class Entity(db.Model, BaseMixin, SerializerMixin):
 
     nb_frames = db.Column(db.Integer)  # Specific to shots
     nb_entities_out = db.Column(db.Integer, default=0)
-    progress = db.relationship("ProgressRecord", back_populates="shot")
+    validation_history = db.relationship("ValidationRecord", back_populates="shot")
 
 
     project_id = db.Column(

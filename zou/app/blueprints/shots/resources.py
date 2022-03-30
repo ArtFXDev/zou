@@ -220,6 +220,38 @@ class ShotPreviewsResource(Resource):
         return playlists_service.get_preview_files_for_entity(shot_id)
 
 
+class ShotProgressResource(Resource):
+    @jwt_required
+    def get(self, shot_id):
+        """
+        Retrieve all the progress in order for the given shot
+        """
+        shot = shots_service.get_shot_with_relations(shot_id)
+        user_service.check_project_access(shot["project_id"])
+        user_service.check_entity_access(shot["id"])
+
+        return [shots_service.get_progress_record(progress_id) for progress_id in shot["progress"]]
+
+    @jwt_required
+    def post(self, shot_id):
+        """
+        Retrieve all the progress in order for the given shot
+        """
+        shot = shots_service.get_shot(shot_id)
+        user_service.check_project_access(shot["project_id"])
+        user_service.check_entity_access(shot["id"])
+
+        progress_range = self.get_arguments()
+        progress_record = shots_service.create_progress_record(shot_id, {"value": progress_range})
+        return progress_record
+
+    def get_arguments(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument("range", required=True)
+        args = parser.parse_args()
+        return args["range"]
+
+
 class SequenceTasksResource(Resource, ArgsMixin):
     @jwt_required
     def get(self, sequence_id):

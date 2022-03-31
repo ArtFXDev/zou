@@ -50,6 +50,13 @@ def create_validation_record(shot_id, data={}, substract=False):
     return validation_record.serialize()
 
 
+def _apply_progress(progress, total, shot, nb_frames):
+    progress["total"] += total
+    progress["progress"] = progress["total"] / nb_frames
+    shots = cast(list, progress["shots"])
+    shots.append(shot)
+
+
 def get_project_progress(project_id, trunc_key="day"):
     if trunc_key not in [
         "year",
@@ -90,23 +97,23 @@ def get_project_progress(project_id, trunc_key="day"):
     project_progress = defaultdict(
         lambda: {"total": 0, "shots": [], "progress": 0}
     )
+
     for date, total, shot in progress_data[::-1]:
         if shot in project_progress[date]["shots"] and nb_frames is not 0:
             continue
+        _apply_progress(project_progress[date], total, shot, nb_frames)
 
-        project_progress[date]["total"] += total
-        project_progress[date]["progress"] = (
-            project_progress[date]["total"] / nb_frames
-        )
-        shots = cast(list, project_progress[date]["shots"])
-        shots.append(shot)
+        for progress in project_progress.values():
+            if shot in progress["shots"]:
+                continue
+            _apply_progress(progress, total, shot, nb_frames)
 
-    progress = [
+    formatted_progress = [
         {"date": key, "total": value["total"], "progress": value["progress"]}
         for key, value in project_progress.items()
     ]
-    progress.sort(key=lambda x: x["date"])
-    return progress
+    formatted_progress.sort(key=lambda x: x["date"])
+    return formatted_progress
 
 
 def get_projects_progress(trunc_key="day"):
@@ -118,9 +125,9 @@ def get_projects_progress(trunc_key="day"):
                 "progress": project_progress["progress"],
             }
 
-    progress = [
+    formatted_progress = [
         {"date": key, "projects": value}
         for key, value in projects_progress.items()
     ]
-    progress.sort(key=lambda x: x["date"])
-    return progress
+    formatted_progress.sort(key=lambda x: x["date"])
+    return formatted_progress

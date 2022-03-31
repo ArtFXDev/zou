@@ -32,6 +32,7 @@ from zou.app.graphql.resolvers import (
 from zou.app.graphql import converters
 
 from zou.app.services.entities_service import get_entity_type
+from zou.app.services.validation_service import get_project_progress
 
 
 class Software(SQLAlchemyObjectType):
@@ -155,16 +156,20 @@ class Shot(SQLAlchemyObjectType):
         ),
     )
     frame_in = graphene.Field(
-        graphene.JSONString,
-        resolver=FieldResolver(lambda x: x.data.get("frame_in"), EntityModel),
+        graphene.Int,
+        resolver=FieldResolver(lambda x: x.data.get("frame_in") if x.data is not None else None, EntityModel),
     )
     frame_out = graphene.Field(
-        graphene.JSONString,
-        resolver=FieldResolver(lambda x: x.data.get("frame_out"), EntityModel),
+        graphene.Int,
+        resolver=FieldResolver(lambda x: x.data.get("frame_out") if x.data is not None else None, EntityModel),
     )
     fps = graphene.Field(
-        graphene.JSONString,
-        resolver=FieldResolver(lambda x: x.data.get("fps"), EntityModel),
+        graphene.Int,
+        resolver=FieldResolver(lambda x: x.data.get("fps") if x.data is not None else None, EntityModel),
+    )
+    validation = graphene.Field(
+        ValidationRecord,
+        resolver=DefaultResolver(ValidationRecordModel, "shot_id", query_all=False, order_by="created_at")
     )
 
 
@@ -226,6 +231,11 @@ class ProjectStatus(SQLAlchemyObjectType):
         model = ProjectStatusModel
 
 
+class Progress(graphene.ObjectType):
+    date = graphene.DateTime()
+    total = graphene.Int()
+
+
 class Project(SQLAlchemyObjectType):
     class Meta:
         model = ProjectModel
@@ -238,6 +248,11 @@ class Project(SQLAlchemyObjectType):
         Asset,
         resolver=EntityResolver("Asset", EntityModel),
     )
+
+    progress_history = graphene.List(Progress)
+
+    def resolve_progress_history(root, info):
+        return get_project_progress(root.id)
 
 
 class AttachmentFile(SQLAlchemyObjectType):

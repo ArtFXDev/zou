@@ -9,6 +9,7 @@ from zou.app.services import (
     schedule_service,
     tasks_service,
     user_service,
+    validation_service
 )
 from zou.app.utils import permissions
 from zou.app.services.exception import WrongParameterException
@@ -358,3 +359,16 @@ class ProductionSequencesScheduleItemsResource(Resource):
         return schedule_service.get_sequences_schedule_items(
             project_id, task_type_id
         )
+
+
+class ProductionProgressResource(Resource):
+    """
+    Resource to retrieve progress along time of the project
+    """
+
+    @jwt_required
+    def get(self, project_id):
+        user_service.check_project_access(project_id)
+        user_service.block_access_to_vendor()
+        project_progress = validation_service.get_project_progress(project_id)
+        return [{**progress, "date": progress["date"].timestamp()} for progress in project_progress]

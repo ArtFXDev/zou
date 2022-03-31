@@ -14,6 +14,7 @@ from zou.app.services import (
     stats_service,
     tasks_service,
     user_service,
+    validation_service,
 )
 
 from zou.app.mixin import ArgsMixin
@@ -230,7 +231,7 @@ class ShotValidationResource(Resource):
         user_service.check_project_access(shot["project_id"])
         user_service.check_entity_access(shot["id"])
 
-        return [shots_service.get_validation_record(validation_id) for validation_id in shot["validation_history"]]
+        return [validation_service.get_validation_record(validation_id) for validation_id in shot["validation_history"]]
 
     @jwt_required
     def post(self, shot_id):
@@ -242,7 +243,7 @@ class ShotValidationResource(Resource):
         user_service.check_entity_access(shot["id"])
 
         frame_set = self.get_arguments()
-        validation_record = shots_service.create_validation_record(shot_id, {"frame_set": frame_set})
+        validation_record = validation_service.create_validation_record(shot_id, {"frame_set": frame_set})
         return validation_record
 
     @jwt_required
@@ -255,7 +256,7 @@ class ShotValidationResource(Resource):
         user_service.check_entity_access(shot["id"])
 
         frame_set = self.get_arguments()
-        validation_record = shots_service.create_validation_record(shot_id, {"frame_set": frame_set}, substract=True)
+        validation_record = validation_service.create_validation_record(shot_id, {"frame_set": frame_set}, substract=True)
         return validation_record
 
     def get_arguments(self):

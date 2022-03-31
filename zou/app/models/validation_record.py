@@ -12,10 +12,11 @@ class ValidationRecord(db.Model, BaseMixin, SerializerMixin):
     """
 
     frame_set = db.Column(db.String(1200))
+    total = db.Column(db.Integer, default=0)
     shot_id = db.Column(
         UUIDType(binary=False), db.ForeignKey("entity.id"), index=True
     )
     shot = db.relationship("Entity", back_populates="validation_history")
 
     def __repr__(self):
-        return "<ProgressRecord %s>" % self.id
+        return "<ValidationRecord %s>" % self.id

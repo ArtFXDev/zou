@@ -58,4 +58,5 @@ graphene==2.1.9
 graphene-sqlalchemy==2.3.0
 
 itsdangerous==2.0.1
+fileseq==1.14.0
 jinja2==3.0.3

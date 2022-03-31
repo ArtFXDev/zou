@@ -22,12 +22,16 @@ from .resources import (
     ProductionEpisodesScheduleItemsResource,
     ProductionSequencesScheduleItemsResource,
     ProductionTimeSpentsResource,
+    ProductionProgressResource,
+    ProductionsProgressResource,
 )
 
 routes = [
     ("/data/projects/open", OpenProjectsResource),
     ("/data/projects/all", AllProjectsResource),
+    ("/data/projects/progress", ProductionsProgressResource),
     ("/data/projects/<project_id>/team", ProductionTeamResource),
+    ("/data/projects/<project_id>/progress", ProductionProgressResource),
     (
         "/data/projects/<project_id>/task-types",
         ProductionTaskTypesResource,

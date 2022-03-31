@@ -237,7 +237,6 @@ def get_task_descriptors(person_id, task):
     return (author, task_name, task_url)
 
 
-
 def send_reply_notification(person_id, author_id, comment, task, reply):
     """
     Send a notification emali telling that a new reply was posted to person
@@ -279,5 +278,3 @@ _%s_
         }
         send_notification(person_id, subject, messages)
     return True
-
-

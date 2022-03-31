@@ -6,6 +6,9 @@ from zou.app.models.working_file import WorkingFile as WorkingFileModel
 from zou.app.models.output_type import OutputType as OutputTypeModel
 from zou.app.models.output_file import OutputFile as OutputFileModel
 from zou.app.models.preview_file import PreviewFile as PreviewFileModel
+from zou.app.models.validation_record import (
+    ValidationRecord as ValidationRecordModel,
+)
 from zou.app.models.task_type import TaskType as TaskTypeModel
 from zou.app.models.task_status import TaskStatus as TaskStatusModel
 from zou.app.models.task import Task as TaskModel
@@ -31,6 +34,8 @@ from zou.app.graphql.resolvers import (
 from zou.app.graphql import converters
 
 from zou.app.services.entities_service import get_entity_type
+from zou.app.services.shots_service import get_shots
+from zou.app.services.validation_service import get_project_progress
 
 
 class Software(SQLAlchemyObjectType):
@@ -64,6 +69,11 @@ class PreviewFile(SQLAlchemyObjectType):
     )
 
 
+class ValidationRecord(SQLAlchemyObjectType):
+    class Meta:
+        model = ValidationRecordModel
+
+
 class Comment(SQLAlchemyObjectType):
     class Meta:
         model = CommentModel
@@ -90,7 +100,9 @@ class Task(SQLAlchemyObjectType):
 
     previews = graphene.List(
         PreviewFile,
-        resolver=DefaultResolver(PreviewFileModel, "task_id", order_by="revision"),
+        resolver=DefaultResolver(
+            PreviewFileModel, "task_id", order_by="revision"
+        ),
     )
     entity = graphene.Field(
         "zou.app.graphql.schema.Entity",
@@ -148,6 +160,36 @@ class Shot(SQLAlchemyObjectType):
             query_all=False,
         ),
     )
+    frame_in = graphene.Field(
+        graphene.Int,
+        resolver=FieldResolver(
+            lambda x: x.data.get("frame_in") if x.data is not None else None,
+            EntityModel,
+        ),
+    )
+    frame_out = graphene.Field(
+        graphene.Int,
+        resolver=FieldResolver(
+            lambda x: x.data.get("frame_out") if x.data is not None else None,
+            EntityModel,
+        ),
+    )
+    fps = graphene.Field(
+        graphene.Int,
+        resolver=FieldResolver(
+            lambda x: x.data.get("fps") if x.data is not None else None,
+            EntityModel,
+        ),
+    )
+    validation = graphene.Field(
+        ValidationRecord,
+        resolver=DefaultResolver(
+            ValidationRecordModel,
+            "shot_id",
+            query_all=False,
+            order_by="created_at",
+        ),
+    )
 
 
 class Sequence(SQLAlchemyObjectType):
@@ -189,6 +231,7 @@ class Asset(SQLAlchemyObjectType):
         ),
     )
 
+
 class Entity(graphene.Union):
     class Meta:
         types = (Shot, Asset)
@@ -203,9 +246,16 @@ class Entity(graphene.Union):
         else:
             return Asset
 
+
 class ProjectStatus(SQLAlchemyObjectType):
     class Meta:
         model = ProjectStatusModel
+
+
+class Progress(graphene.ObjectType):
+    date = graphene.DateTime()
+    total = graphene.Int()
+    progress = graphene.Float()
 
 
 class Project(SQLAlchemyObjectType):
@@ -221,6 +271,19 @@ class Project(SQLAlchemyObjectType):
         resolver=EntityResolver("Asset", EntityModel),
     )
 
+    progress_history = graphene.List(
+        Progress, trunc_key=graphene.String(required=False)
+    )
+
+    def resolve_progress_history(root, info, **kwargs):
+        return get_project_progress(root.id, **kwargs)
+
+    total_frames = graphene.Int()
+
+    def resolve_total_frames(root, info):
+        shots = get_shots({"project_id": root.id})
+        return sum(shot.get("nb_frames") or 0 for shot in shots)
+
 
 class AttachmentFile(SQLAlchemyObjectType):
     class Meta:
@@ -235,6 +298,7 @@ class Department(SQLAlchemyObjectType):
 class Person(SQLAlchemyObjectType):
     class Meta:
         model = PersonModel
+        exclude_fields = "password"
 
     comments = graphene.List(
         Comment,
@@ -282,6 +346,15 @@ class Query(graphene.ObjectType):
     preview_files = graphene.List(
         PreviewFile,
         resolver=DefaultResolver(PreviewFileModel),
+    )
+    validation_record = graphene.Field(
+        ValidationRecord,
+        resolver=DefaultResolver(ValidationRecord),
+    )
+    validation_records = graphene.List(
+        ValidationRecord,
+        resolver=IDResolver(ValidationRecord),
+        id=graphene.ID(),
     )
     task_type = graphene.Field(
         TaskType,

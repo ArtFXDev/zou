@@ -1,3 +1,5 @@
+import math
+
 from flask_restful import Resource
 from flask_jwt_extended import jwt_required
 
@@ -372,6 +374,25 @@ class ProductionProgressResource(Resource):
         user_service.block_access_to_vendor()
         project_progress = validation_service.get_project_progress(project_id)
         return [
-            {**progress, "date": progress["date"].timestamp()}
+            {
+                **progress,
+                "date": math.floor(progress["date"].timestamp() * 1000),
+            }
             for progress in project_progress
+        ]
+
+
+class ProductionsProgressResource(Resource):
+    """
+    Resource to retrieve progress along time of all the projects
+    """
+
+    def get(self):
+        projects_progress = validation_service.get_projects_progress()
+        return [
+            {
+                **progress,
+                "date": math.floor(progress["date"].timestamp() * 1000),
+            }
+            for progress in projects_progress
         ]

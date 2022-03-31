@@ -6,6 +6,7 @@ from sqlalchemy import func
 
 from zou.app import db
 from zou.app.models.entity import Entity
+from zou.app.models.project import Project
 from zou.app.models.validation_record import ValidationRecord
 from zou.app.services import (
     shots_service,
@@ -49,8 +50,8 @@ def create_validation_record(shot_id, data={}, substract=False):
     return validation_record.serialize()
 
 
-def get_project_progress(project_id):
-    truncated_date = func.date_trunc("day", ValidationRecord.created_at)
+def get_project_progress(project_id, trunc_key="day"):
+    truncated_date = func.date_trunc(trunc_key, ValidationRecord.created_at)
     progress_query = (
         db.session.query(
             truncated_date,
@@ -89,6 +90,23 @@ def get_project_progress(project_id):
     progress = [
         {"date": key, "total": value["total"], "progress": value["progress"]}
         for key, value in project_progress.items()
+    ]
+    progress.sort(key=lambda x: x["date"])
+    return progress
+
+
+def get_projects_progress():
+    projects_progress = defaultdict(lambda: {})
+    for project in Project.query.all():
+        for project_progress in get_project_progress(project.id):
+            projects_progress[project_progress["date"]][project.name] = {
+                "total": project_progress["total"],
+                "progress": project_progress["progress"],
+            }
+
+    progress = [
+        {"date": key, "projects": value}
+        for key, value in projects_progress.items()
     ]
     progress.sort(key=lambda x: x["date"])
     return progress

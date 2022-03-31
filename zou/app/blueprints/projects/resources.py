@@ -9,7 +9,7 @@ from zou.app.services import (
     schedule_service,
     tasks_service,
     user_service,
-    validation_service
+    validation_service,
 )
 from zou.app.utils import permissions
 from zou.app.services.exception import WrongParameterException
@@ -371,4 +371,7 @@ class ProductionProgressResource(Resource):
         user_service.check_project_access(project_id)
         user_service.block_access_to_vendor()
         project_progress = validation_service.get_project_progress(project_id)
-        return [{**progress, "date": progress["date"].timestamp()} for progress in project_progress]
+        return [
+            {**progress, "date": progress["date"].timestamp()}
+            for progress in project_progress
+        ]

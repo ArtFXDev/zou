@@ -456,6 +456,7 @@ def remove_old_data(days_old=90):
     deletion_service.remove_old_notifications(days_old)
     print("Old data removed.")
 
+
 def reset_user_password(user_email):
     password = auth.encrypt_password("default")
     persons_service.update_password(user_email, password)

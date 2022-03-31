@@ -125,12 +125,12 @@ def load_api():
     api.configure(app)
 
     app.add_url_rule(
-        '/graphql',
+        "/graphql",
         view_func=GraphQLView.as_view(
-            'graphql',
+            "graphql",
             schema=schema,
-            graphiql=True # for having the GraphiQL interface
-        )
+            graphiql=True,  # for having the GraphiQL interface
+        ),
     )
 
     fs.mkdir_p(app.config["TMP_DIR"])

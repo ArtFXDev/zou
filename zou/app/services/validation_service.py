@@ -51,13 +51,23 @@ def create_validation_record(shot_id, data={}, substract=False):
 
 
 def get_project_progress(project_id, trunc_key="day"):
+    if trunc_key not in [
+        "year",
+        "month",
+        "day",
+        "hour",
+        "minute",
+        "second",
+        "microsecond",
+    ]:
+        trunc_key = "day"
+
     truncated_date = func.date_trunc(trunc_key, ValidationRecord.created_at)
     progress_query = (
         db.session.query(
             truncated_date,
             ValidationRecord.total,
             ValidationRecord.shot_id,
-            Entity.nb_frames,
         )
         .distinct(truncated_date, ValidationRecord.shot_id)
         .filter(ValidationRecord.shot_id == Entity.id)
@@ -70,21 +80,25 @@ def get_project_progress(project_id, trunc_key="day"):
     )
     progress_data = progress_query.all()
 
+    nb_frames_query = (
+        db.session.query(func.sum(Entity.nb_frames).label("nb_frames"))
+        .filter(Entity.entity_type_id == shots_service.get_shot_type()["id"])
+        .filter(Entity.project_id == project_id)
+    )
+    nb_frames = nb_frames_query.first()[0]
+
     project_progress = defaultdict(
         lambda: {"total": 0, "shots": [], "progress": 0}
     )
-    for date, total, shot, nb_frames in progress_data[::-1]:
+    for date, total, shot in progress_data[::-1]:
         if shot in project_progress[date]["shots"] and nb_frames is not 0:
             continue
 
-        shots = cast(list, project_progress[date]["shots"])
-        progress = cast(int, project_progress[date]["progress"])
-        progress = progress * (len(shots) / (len(shots) + 1)) + (
-            (total / nb_frames) / (len(shots) + 1)
-        )
-
-        project_progress[date]["progress"] = progress
         project_progress[date]["total"] += total
+        project_progress[date]["progress"] = (
+            project_progress[date]["total"] / nb_frames
+        )
+        shots = cast(list, project_progress[date]["shots"])
         shots.append(shot)
 
     progress = [
@@ -95,10 +109,10 @@ def get_project_progress(project_id, trunc_key="day"):
     return progress
 
 
-def get_projects_progress():
+def get_projects_progress(trunc_key="day"):
     projects_progress = defaultdict(lambda: {})
     for project in Project.query.all():
-        for project_progress in get_project_progress(project.id):
+        for project_progress in get_project_progress(project.id, trunc_key):
             projects_progress[project_progress["date"]][project.name] = {
                 "total": project_progress["total"],
                 "progress": project_progress["progress"],

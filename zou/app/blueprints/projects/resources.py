@@ -1,6 +1,6 @@
 import math
 
-from flask_restful import Resource
+from flask_restful import Resource, reqparse
 from flask_jwt_extended import jwt_required
 
 from flask import request
@@ -372,7 +372,10 @@ class ProductionProgressResource(Resource):
     def get(self, project_id):
         user_service.check_project_access(project_id)
         user_service.block_access_to_vendor()
-        project_progress = validation_service.get_project_progress(project_id)
+        trunc_key = self.get_arguments()
+        project_progress = validation_service.get_project_progress(
+            project_id, trunc_key
+        )
         return [
             {
                 **progress,
@@ -381,6 +384,12 @@ class ProductionProgressResource(Resource):
             for progress in project_progress
         ]
 
+    def get_arguments(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument("trunc_key", required=False)
+        args = parser.parse_args()
+        return args.get("trunc_key", "day")
+
 
 class ProductionsProgressResource(Resource):
     """
@@ -388,7 +397,8 @@ class ProductionsProgressResource(Resource):
     """
 
     def get(self):
-        projects_progress = validation_service.get_projects_progress()
+        trunc_key = self.get_arguments()
+        projects_progress = validation_service.get_projects_progress(trunc_key)
         return [
             {
                 **progress,
@@ -396,3 +406,9 @@ class ProductionsProgressResource(Resource):
             }
             for progress in projects_progress
         ]
+
+    def get_arguments(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument("trunc_key", required=False)
+        args = parser.parse_args()
+        return args.get("trunc_key", "day")

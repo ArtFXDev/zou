@@ -34,6 +34,7 @@ from zou.app.graphql.resolvers import (
 from zou.app.graphql import converters
 
 from zou.app.services.entities_service import get_entity_type
+from zou.app.services.shots_service import get_shots
 from zou.app.services.validation_service import get_project_progress
 
 
@@ -270,10 +271,18 @@ class Project(SQLAlchemyObjectType):
         resolver=EntityResolver("Asset", EntityModel),
     )
 
-    progress_history = graphene.List(Progress)
+    progress_history = graphene.List(
+        Progress, trunc_key=graphene.String(required=False)
+    )
 
-    def resolve_progress_history(root, info):
-        return get_project_progress(root.id)
+    def resolve_progress_history(root, info, **kwargs):
+        return get_project_progress(root.id, **kwargs)
+
+    total_frames = graphene.Int()
+
+    def resolve_total_frames(root, info):
+        shots = get_shots({"project_id": root.id})
+        return sum(shot.get("nb_frames") or 0 for shot in shots)
 
 
 class AttachmentFile(SQLAlchemyObjectType):

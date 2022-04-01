@@ -42,7 +42,7 @@ def create_validation_record(shot_id, data={}, substract=False):
 
     # Make sure the new frame set does not exeed the amount of frames
     frame_set = FrameSet.from_iterable(
-        [frame for frame in frame_set.items if frame <= shot.nb_frames]
+        [frame for frame in frame_set.items if frame <= shot.nb_frames and frame > 0]
     )
 
     validation_record = ValidationRecord.create(

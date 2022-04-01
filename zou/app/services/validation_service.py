@@ -37,6 +37,8 @@ def create_validation_record(shot_id, data={}, substract=False):
             frame_set = existing_frame_set.difference(frame_set)
         else:
             frame_set = existing_frame_set.union(frame_set)
+    elif substract:
+        frame_set = FrameSet([])
 
     # Make sure the new frame set does not exeed the amount of frames
     frame_set = FrameSet.from_iterable(

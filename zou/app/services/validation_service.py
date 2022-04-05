@@ -120,13 +120,14 @@ def get_project_progress(project_id, trunc_key="day"):
         for key, value in project_progress.items()
     ]
     formatted_progress.sort(key=lambda x: x["date"])
-    formatted_progress.append(
-        {
-            "date": datetime.now(),
-            "total": formatted_progress[-1]["total"],
-            "progress": formatted_progress[-1]["progress"],
-        }
-    )
+    if formatted_progress:
+        formatted_progress.append(
+            {
+                "date": datetime.now(),
+                "total": formatted_progress[-1]["total"],
+                "progress": formatted_progress[-1]["progress"],
+            }
+        )
     return formatted_progress
 
 

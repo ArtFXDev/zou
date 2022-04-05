@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import datetime
 from typing import cast
 
 from fileseq import FrameSet
@@ -42,7 +43,11 @@ def create_validation_record(shot_id, data={}, substract=False):
 
     # Make sure the new frame set does not exeed the amount of frames
     frame_set = FrameSet.from_iterable(
-        [frame for frame in frame_set.items if frame <= shot.nb_frames and frame > 0]
+        [
+            frame
+            for frame in frame_set.items
+            if frame <= shot.nb_frames and frame > 0
+        ]
     )
 
     validation_record = ValidationRecord.create(
@@ -115,6 +120,14 @@ def get_project_progress(project_id, trunc_key="day"):
         for key, value in project_progress.items()
     ]
     formatted_progress.sort(key=lambda x: x["date"])
+    if formatted_progress:
+        formatted_progress.append(
+            {
+                "date": datetime.now(),
+                "total": formatted_progress[-1]["total"],
+                "progress": formatted_progress[-1]["progress"],
+            }
+        )
     return formatted_progress
 
 

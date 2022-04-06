@@ -121,9 +121,12 @@ def get_project_progress(project_id, trunc_key="day"):
     ]
     formatted_progress.sort(key=lambda x: x["date"])
     if formatted_progress:
+        now = datetime.now()
         formatted_progress.append(
             {
-                "date": datetime.now(),
+                "date": now.replace(
+                    day=now.day + 1, hour=0, minute=0, second=0, microsecond=0
+                ),
                 "total": formatted_progress[-1]["total"],
                 "progress": formatted_progress[-1]["progress"],
             }

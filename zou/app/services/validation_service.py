@@ -139,7 +139,10 @@ def get_project_progress(project_id, trunc_key="day"):
 
 
 def get_projects_progress(
-    trunc_key="day", excluded_projects=EXCLUDED_PROJECTS, include_average=True
+    trunc_key="day",
+    excluded_projects=EXCLUDED_PROJECTS,
+    include_average=True,
+    average_key="AVERAGE",
 ):
     projects_progress = defaultdict(lambda: {})
     for project in Project.query.all():
@@ -158,7 +161,9 @@ def get_projects_progress(
     formatted_progress.sort(key=lambda x: x["date"])
 
     if include_average:
-        return get_average_progrect_progress(formatted_progress)
+        return get_average_progrect_progress(
+            formatted_progress, average_key=average_key
+        )
 
     return formatted_progress
 

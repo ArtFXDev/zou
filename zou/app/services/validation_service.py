@@ -5,6 +5,7 @@ from typing import cast
 from fileseq import FrameSet
 from sqlalchemy import func
 
+from zou.constant import EXCLUDED_PROJECTS
 from zou.app import db
 from zou.app.models.entity import Entity
 from zou.app.models.project import Project
@@ -125,7 +126,10 @@ def get_project_progress(project_id, trunc_key="day"):
         formatted_progress.append(
             {
                 "date": now.replace(
-                    day=now.day + 1, hour=0, minute=0, second=0, microsecond=0
+                    hour=min(now.hour + 1, 23),
+                    minute=0,
+                    second=0,
+                    microsecond=0,
                 ),
                 "total": formatted_progress[-1]["total"],
                 "progress": formatted_progress[-1]["progress"],
@@ -134,9 +138,16 @@ def get_project_progress(project_id, trunc_key="day"):
     return formatted_progress
 
 
-def get_projects_progress(trunc_key="day"):
+def get_projects_progress(
+    trunc_key="day",
+    excluded_projects=EXCLUDED_PROJECTS,
+    include_average=True,
+    average_key="AVERAGE",
+):
     projects_progress = defaultdict(lambda: {})
     for project in Project.query.all():
+        if project.name in excluded_projects:
+            continue
         for project_progress in get_project_progress(project.id, trunc_key):
             projects_progress[project_progress["date"]][project.name] = {
                 "total": project_progress["total"],
@@ -148,4 +159,32 @@ def get_projects_progress(trunc_key="day"):
         for key, value in projects_progress.items()
     ]
     formatted_progress.sort(key=lambda x: x["date"])
+
+    if include_average:
+        return get_average_progrect_progress(
+            formatted_progress, average_key=average_key
+        )
+
     return formatted_progress
+
+
+def get_average_progrect_progress(projects_progress, average_key="AVERAGE"):
+    progress_accumulation = {}
+    for progress in projects_progress:
+        for project_name, project_progress in progress["projects"].items():
+            progress_accumulation[project_name] = project_progress
+
+        # Compute the average of the projects's progress at this time
+        progress["projects"].setdefault(average_key, {})
+        progress["projects"][average_key]["progress"] = sum(
+            accumulation["progress"]
+            for accumulation in progress_accumulation.values()
+        ) / len(progress_accumulation)
+
+        # Compute the total frames of all the projects at that time
+        progress["projects"][average_key]["total"] = sum(
+            accumulation["total"]
+            for accumulation in progress_accumulation.values()
+        )
+
+    return projects_progress

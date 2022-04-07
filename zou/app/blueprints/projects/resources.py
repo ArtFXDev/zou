@@ -397,8 +397,10 @@ class ProductionsProgressResource(Resource):
     """
 
     def get(self):
-        trunc_key = self.get_arguments()
-        projects_progress = validation_service.get_projects_progress(trunc_key)
+        trunc_key, average_key = self.get_arguments()
+        projects_progress = validation_service.get_projects_progress(
+            trunc_key, average_key=average_key
+        )
         return [
             {
                 **progress,
@@ -410,5 +412,6 @@ class ProductionsProgressResource(Resource):
     def get_arguments(self):
         parser = reqparse.RequestParser()
         parser.add_argument("trunc_key", required=False)
+        parser.add_argument("average_key", required=False)
         args = parser.parse_args()
-        return args.get("trunc_key", "day")
+        return args.get("trunc_key", "day"), args.get("average_key", "AVERAGE")

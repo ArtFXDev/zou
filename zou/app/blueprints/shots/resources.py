@@ -721,27 +721,12 @@ class ShotVersionsResource(Resource):
         user_service.check_entity_access(shot["id"])
         return shots_service.get_shot_versions(shot_id)
 
-class EntityRenderTimeResource(Resource):
+class ShotRenderTimeResource(Resource):
     """
-    Retrieve and set the average render time of a frame for the given entity
+    Retrieve the render time per frame for the given shot.
+    If the shot does not have any info the info of the sequence is used
     """
 
     def get(self, entity_id):
         entity = entities_service.get_entity(entity_id)
         return {"render_time": entities_service.get_entity_render_time(entity)}
-
-    @jwt_required
-    def put(self, entity_id):
-        entity = entities_service.get_entity(entity_id)
-        render_time = self.get_arguments()
-
-        user_service.check_project_access(entity["project_id"])
-        user_service.check_entity_access(entity["id"])
-
-        entity.update({"render_time": render_time})
-
-    def get_arguments(self):
-        parser = reqparse.RequestParser()
-        parser.add_argument("render_time", required=True)
-        args = parser.parse_args()
-        return args["render_time"]

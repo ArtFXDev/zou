@@ -216,7 +216,10 @@ def remove_entity_link(link_id):
 
 
 def get_entity_render_time(entity):
-    while not entity.render_time and entity.parent_id:
-        entity = get_entity(entity.parent_id)
+    if isinstance(entity, Entity):
+        entity = entity.serialize()
 
-    return entity.render_time or 0
+    while not entity.get("render_time") and entity.get("parent_id"):
+        entity = get_entity(entity["parent_id"])
+
+    return entity.get("render_time") or 0

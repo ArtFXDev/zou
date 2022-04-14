@@ -208,6 +208,10 @@ class Sequence(SQLAlchemyObjectType):
         graphene.String,
         resolver=lambda root, info: "Sequence",
     )
+    render_time = graphene.Field(
+        graphene.Int,
+        resolver=FieldResolver(get_entity_render_time, EntityModel),
+    )
 
 
 class Asset(SQLAlchemyObjectType):

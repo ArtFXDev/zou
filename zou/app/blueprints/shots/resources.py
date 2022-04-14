@@ -720,3 +720,13 @@ class ShotVersionsResource(Resource):
         user_service.check_project_access(shot["project_id"])
         user_service.check_entity_access(shot["id"])
         return shots_service.get_shot_versions(shot_id)
+
+class ShotRenderTimeResource(Resource):
+    """
+    Retrieve the render time per frame for the given shot.
+    If the shot does not have any info the info of the sequence is used
+    """
+
+    def get(self, entity_id):
+        entity = entities_service.get_entity(entity_id)
+        return {"render_time": entities_service.get_entity_render_time(entity)}

@@ -213,3 +213,10 @@ def remove_entity_link(link_id):
         return link.serialize()
     except:
         raise EntityLinkNotFoundException
+
+
+def get_entity_render_time(entity):
+    while not entity.render_time and entity.parent_id:
+        entity = get_entity(entity.parent_id)
+
+    return entity.render_time or 0

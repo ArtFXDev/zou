@@ -33,7 +33,7 @@ from zou.app.graphql.resolvers import (
 )
 from zou.app.graphql import converters
 
-from zou.app.services.entities_service import get_entity_type
+from zou.app.services.entities_service import get_entity_type, get_entity_render_time
 from zou.app.services.shots_service import get_shots
 from zou.app.services.validation_service import get_project_progress
 
@@ -189,6 +189,10 @@ class Shot(SQLAlchemyObjectType):
             query_all=False,
             order_by="created_at",
         ),
+    )
+    render_time = graphene.Field(
+        graphene.Int,
+        resolver=FieldResolver(get_entity_render_time, EntityModel),
     )
 
 

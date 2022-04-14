@@ -84,7 +84,9 @@ class Project(db.Model, BaseMixin, SerializerMixin):
         UUIDType(binary=False), db.ForeignKey("project_status.id"), index=True
     )
 
-    team = db.relationship("Person", secondary="project_person_link")
+    team = db.relationship(
+        "Person", secondary="project_person_link", back_populates="projects"
+    )
     asset_types = db.relationship(
         "EntityType", secondary="project_asset_type_link"
     )

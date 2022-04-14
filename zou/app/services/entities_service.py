@@ -220,6 +220,6 @@ def get_entity_render_time(entity):
         entity = entity.serialize()
 
     while not entity.get("render_time") and entity.get("parent_id"):
-        entity = get_entity(entity["parent_id"])
+        entity = get_entity_raw(entity["parent_id"]).serialize()
 
     return entity.get("render_time") or 0

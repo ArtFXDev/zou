@@ -66,7 +66,7 @@ class Project(db.Model, BaseMixin, SerializerMixin):
     name = db.Column(db.String(80), nullable=False, unique=True, index=True)
     code = db.Column(db.String(80))
     description = db.Column(db.Text())
-    color = db.Column(db.String(20))
+    color = db.Column(db.String(7))
     shotgun_id = db.Column(db.Integer)
     file_tree = db.Column(JSONB)
     data = db.Column(JSONB)

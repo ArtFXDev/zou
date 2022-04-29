@@ -29,6 +29,8 @@ class Person(db.Model, BaseMixin, SerializerMixin):
     last_name = db.Column(db.String(80), nullable=False)
     email = db.Column(EmailType, unique=True)
     phone = db.Column(db.String(30))
+    coins = db.Column(db.Integer)
+    scores = db.relationship("GameScore", back_populates="player")
 
     active = db.Column(db.Boolean(), default=True)
     last_presence = db.Column(db.Date())

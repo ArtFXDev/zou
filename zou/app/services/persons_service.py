@@ -113,7 +113,6 @@ def get_person_by_email_raw(email):
     return person
 
 
-@cache.memoize_function(120)
 def get_person_by_email(email, unsafe=False, relations=False):
     """
     Return person that matches given email as a dictionary.

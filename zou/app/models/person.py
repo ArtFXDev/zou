@@ -19,6 +19,14 @@ department_link = db.Table(
     ),
 )
 
+game_variant_link = db.Table(
+    "variant_link",
+    db.Column("person_id", UUIDType(binary=False), db.ForeignKey("person.id")),
+    db.Column(
+        "variant_id", UUIDType(binary=False), db.ForeignKey("game_variant.id")
+    ),
+)
+
 
 class Person(db.Model, BaseMixin, SerializerMixin):
     """
@@ -29,8 +37,11 @@ class Person(db.Model, BaseMixin, SerializerMixin):
     last_name = db.Column(db.String(80), nullable=False)
     email = db.Column(EmailType, unique=True)
     phone = db.Column(db.String(30))
-    coins = db.Column(db.Integer)
+    coins = db.Column(db.Integer, default=0, nullable=False)
     scores = db.relationship("GameScore", back_populates="player")
+    game_variants = db.relationship(
+        "GameVariant", secondary=game_variant_link, back_populates="owners"
+    )
 
     active = db.Column(db.Boolean(), default=True)
     last_presence = db.Column(db.Date())

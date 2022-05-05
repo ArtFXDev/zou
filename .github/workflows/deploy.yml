@@ -41,8 +41,3 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Delete package version
-        uses: actions/delete-package-versions@v3
-        with:
-          num-old-versions-to-delete: 2

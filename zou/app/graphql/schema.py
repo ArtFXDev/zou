@@ -22,6 +22,9 @@ from zou.app.models.attachment_file import (
 from zou.app.models.comment import Comment as CommentModel
 from zou.app.models.department import Department as DepartmentModel
 from zou.app.models.person import Person as PersonModel
+from zou.app.models.gaming import Game as GameModel
+from zou.app.models.gaming import GameVariant as GameVariantModel
+from zou.app.models.gaming import GameScore as GameScoreModel
 from zou.app.graphql.resolvers import (
     DefaultResolver,
     IDResolver,
@@ -33,7 +36,10 @@ from zou.app.graphql.resolvers import (
 )
 from zou.app.graphql import converters
 
-from zou.app.services.entities_service import get_entity_type, get_entity_render_time
+from zou.app.services.entities_service import (
+    get_entity_type,
+    get_entity_render_time,
+)
 from zou.app.services.shots_service import get_shots
 from zou.app.services.validation_service import get_project_progress
 
@@ -318,6 +324,21 @@ class Person(SQLAlchemyObjectType):
     )
 
 
+class Game(SQLAlchemyObjectType):
+    class Meta:
+        model = GameModel
+
+
+class GameVariant(SQLAlchemyObjectType):
+    class Meta:
+        model = GameVariantModel
+
+
+class GameScore(SQLAlchemyObjectType):
+    class Meta:
+        model = GameScoreModel
+
+
 class Query(graphene.ObjectType):
     software = graphene.Field(
         Software,
@@ -471,6 +492,24 @@ class Query(graphene.ObjectType):
     persons = graphene.List(
         Person,
         resolver=DefaultResolver(PersonModel),
+    )
+    game = graphene.Field(
+        Game,
+        resolver=IDResolver(GameModel),
+        id=graphene.ID(),
+    )
+    games = graphene.List(
+        Game,
+        resolver=DefaultResolver(GameModel),
+    )
+    game_variant = graphene.Field(
+        GameVariant,
+        resolver=IDResolver(GameVariantModel),
+        id=graphene.ID(),
+    )
+    game_variants = graphene.List(
+        GameVariant,
+        resolver=DefaultResolver(GameVariantModel),
     )
 
 

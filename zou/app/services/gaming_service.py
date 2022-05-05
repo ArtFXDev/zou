@@ -107,6 +107,29 @@ def create_score(game, points):
     ).serialize()
 
 
+def filter_game_score(game_score):
+    EXCLUDED_KEYS = ["game"]
+    INCLUDED_PLAYER_KEYS = [
+        "first_name",
+        "last_name",
+        "full_name",
+        "id",
+        "has_avatar",
+    ]
+    game_score = {
+        key: value
+        for key, value in game_score.items()
+        if key not in EXCLUDED_KEYS
+    }
+    player = {
+        key: value
+        for key, value in game_score.get("player", {}).items()
+        if key in INCLUDED_PLAYER_KEYS
+    }
+    game_score["player"] = player
+    return game_score
+
+
 def get_scores_by_game(game, player=None, page_size=None, page_index=0):
     criterions = {"game_id": get_game(game)["id"]}
     if player is not None:
@@ -116,14 +139,19 @@ def get_scores_by_game(game, player=None, page_size=None, page_index=0):
         raise Exception("The given game does not exists")
 
     scores_query = GameScore.query.filter_by(**criterions).order_by(
-        GameScore.points
+        GameScore.points.desc()
     )
     if page_size is not None:
         scores_query = scores_query.limit(page_size).offset(
             page_size * page_index
         )
 
-    return list(map(lambda x: x.serialize(), scores_query.all()))
+    return list(
+        map(
+            lambda x: filter_game_score(x.serialize()),
+            scores_query.all(),
+        )
+    )
 
 
 def get_scores_by_player(player=None, game=None, page_size=None, page_index=0):
@@ -137,11 +165,16 @@ def get_scores_by_player(player=None, game=None, page_size=None, page_index=0):
         raise Exception("The given player does not exists")
 
     scores_query = GameScore.query.filter_by(**criterions).order_by(
-        GameScore.points
+        GameScore.points.desc()
     )
     if page_size is not None:
         scores_query = scores_query.limit(page_size).offset(
             page_size * page_index
         )
 
-    return list(map(lambda x: x.serialize(), scores_query.all()))
+    return list(
+        map(
+            lambda x: filter_game_score(x.serialize()),
+            scores_query.all(),
+        )
+    )

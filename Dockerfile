@@ -7,14 +7,14 @@ RUN apk add --no-cache ffmpeg bzip2 libpq postgresql-client\
 
 ARG ZOU_VERSION
 
-COPY ./zou/requirements.txt /opt/zou/requirements.txt
-COPY ./zou/setup.py /opt/zou/setup.py
-COPY ./zou/setup.cfg /opt/zou/setup.cfg
+COPY ./requirements.txt /opt/zou/requirements.txt
+COPY ./setup.py /opt/zou/setup.py
+COPY ./setup.cfg /opt/zou/setup.cfg
 
 WORKDIR /opt/zou
 RUN pip install -r requirements.txt
 
-COPY ./zou /opt/zou
+COPY . /opt/zou
 
 RUN pip install --upgrade pip wheel setuptools
 RUN pip install .

@@ -23,17 +23,9 @@ class OpenProjectsResource(Resource):
     projects are not needed.
     """
 
-    @jwt_required
     def get(self):
         name = request.args.get("name", None)
-        try:
-            permissions.check_admin_permissions()
-            for_client = permissions.has_client_permissions()
-            return projects_service.open_projects(
-                name=name, for_client=for_client
-            )
-        except permissions.PermissionDenied:
-            return user_service.get_open_projects(name=name)
+        return projects_service.open_projects(name=name)
 
 
 class AllProjectsResource(Resource):

@@ -8,6 +8,11 @@ from zou.app.services import gaming_service
 from zou.app.blueprints.crud.base import BaseModelResource
 
 
+class FreeBaseModelResource(BaseModelResource):
+    def check_read_permissions(self, instance):
+        return True
+
+
 class GameResource(BaseModelResource, ArgsMixin):
     def __init__(self):
         BaseModelResource.__init__(self, Game)
@@ -31,9 +36,9 @@ class GamesResource(Resource, ArgsMixin):
         return (args["name"],)
 
 
-class GameVariantResource(BaseModelResource, ArgsMixin):
+class GameVariantResource(FreeBaseModelResource, ArgsMixin):
     def __init__(self):
-        BaseModelResource.__init__(self, GameVariant)
+        FreeBaseModelResource.__init__(self, GameVariant)
 
     @jwt_required
     def post(self, instance_id):
@@ -63,9 +68,9 @@ class GameVariantsResource(Resource, ArgsMixin):
         return (args["name"], args["price"], args["title"], args["color"])
 
 
-class GameScoreResource(BaseModelResource, ArgsMixin):
+class GameScoreResource(FreeBaseModelResource, ArgsMixin):
     def __init__(self):
-        BaseModelResource.__init__(self, GameScore)
+        FreeBaseModelResource.__init__(self, GameScore)
 
 
 class GameScoresResource(Resource, ArgsMixin):

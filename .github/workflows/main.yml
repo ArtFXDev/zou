@@ -1,6 +1,7 @@
 name: Deploy Zou to staging environment
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - master

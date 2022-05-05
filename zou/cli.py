@@ -90,7 +90,8 @@ def stamp_db():
 
 
 @cli.command()
-def reset_migrations():
+@click.argument("revision", default="base")
+def reset_migrations(revision):
     "Set the database schema revision to first one."
 
     from zou.app import app
@@ -99,7 +100,7 @@ def reset_migrations():
         import zou
 
         directory = os.path.join(os.path.dirname(zou.__file__), "migrations")
-        flask_migrate.stamp(directory=directory, revision="base")
+        flask_migrate.stamp(directory=directory, revision=revision)
 
 
 @cli.command()

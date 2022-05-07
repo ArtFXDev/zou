@@ -1,9 +1,8 @@
 from sqlalchemy_utils import UUIDType
-
 from zou.app import db
-from zou.app.models.serializer import SerializerMixin
 from zou.app.models.base import BaseMixin
 from zou.app.models.person import game_variant_link
+from zou.app.models.serializer import SerializerMixin
 
 
 class Game(db.Model, BaseMixin, SerializerMixin):
@@ -20,6 +19,7 @@ class GameVariant(db.Model, BaseMixin, SerializerMixin):
 
     name = db.Column(db.String(80))
     color = db.Column(db.String(7))
+    badge = db.Column(db.String(10))
     title = db.Column(db.String(80))
     price = db.Column(db.Integer, default=0, nullable=False)
     game_id = db.Column(

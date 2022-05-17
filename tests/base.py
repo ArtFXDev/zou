@@ -7,12 +7,14 @@ import ntpath
 from mixer.backend.flask import mixer
 
 from zou.app import app
+from zou.app.models.status_automation import StatusAutomation
 from zou.app.utils import fields, auth, fs
 from zou.app.services import (
     breakdown_service,
     comments_service,
     file_tree_service,
     tasks_service,
+    projects_service,
 )
 
 from zou.app.models.asset_instance import AssetInstance
@@ -442,7 +444,7 @@ class ApiDBTestCase(ApiTestCase):
             first_name="John",
             last_name="Did",
             role="admin",
-            email=u"john.did@gmail.com",
+            email="john.did@gmail.com",
             password=auth.encrypt_password("mypassword"),
         ).serialize()
         return self.user
@@ -452,7 +454,7 @@ class ApiDBTestCase(ApiTestCase):
             first_name="John",
             last_name="Did2",
             role="manager",
-            email=u"john.did.manager@gmail.com",
+            email="john.did.manager@gmail.com",
             password=auth.encrypt_password("mypassword"),
         ).serialize()
         return self.user_manager
@@ -461,7 +463,7 @@ class ApiDBTestCase(ApiTestCase):
         self.user_cg_artist = Person.create(
             first_name="John",
             last_name="Did3",
-            email=u"john.did.cg.artist@gmail.com",
+            email="john.did.cg.artist@gmail.com",
             role="user",
             password=auth.encrypt_password("mypassword"),
         ).serialize(relations=True)
@@ -472,7 +474,7 @@ class ApiDBTestCase(ApiTestCase):
             first_name="John",
             last_name="Did4",
             role="client",
-            email=u"john.did.client@gmail.com",
+            email="john.did.client@gmail.com",
             password=auth.encrypt_password("mypassword"),
         ).serialize()
         return self.user_client
@@ -482,7 +484,7 @@ class ApiDBTestCase(ApiTestCase):
             first_name="John",
             last_name="Did5",
             role="vendor",
-            email=u"john.did.vendor@gmail.com",
+            email="john.did.vendor@gmail.com",
             password=auth.encrypt_password("mypassword"),
         ).serialize()
         return self.user_vendor
@@ -512,6 +514,7 @@ class ApiDBTestCase(ApiTestCase):
         self.sequence_type = EntityType.create(name="Sequence")
         self.episode_type = EntityType.create(name="Episode")
         self.scene_type = EntityType.create(name="Scene")
+        self.edit_type = EntityType.create(name="Edit")
 
     def generate_fixture_asset_types(self):
         self.asset_type_character = EntityType.create(name="Character")
@@ -530,21 +533,42 @@ class ApiDBTestCase(ApiTestCase):
             name="Shaders",
             short_name="shd",
             color="#FFFFFF",
+            for_entity="Asset",
+            department_id=self.department.id,
+        )
+        self.task_type_concept = TaskType.create(
+            name="Concept",
+            short_name="cpt",
+            color="#FFFFFF",
+            for_entity="Asset",
+            department_id=self.department.id,
+        )
+        self.task_type_modeling = TaskType.create(
+            name="Modeling",
+            short_name="mdl",
+            color="#FFFFFF",
+            for_entity="Asset",
             department_id=self.department.id,
         )
         self.task_type_animation = TaskType.create(
             name="Animation",
             short_name="anim",
             color="#FFFFFF",
-            for_shots=True,
+            for_entity="Shot",
             department_id=self.department_animation.id,
         )
         self.task_type_layout = TaskType.create(
             name="Layout",
             short_name="layout",
             color="#FFFFFF",
-            for_shots=True,
+            for_entity="Shot",
             department_id=self.department_animation.id,
+        )
+        self.task_type_edit = TaskType.create(
+            name="Edit",
+            short_name="edit",
+            color="#FFFFFF",
+            for_entity="Edit",
         )
 
     def generate_fixture_task_status(self):
@@ -577,11 +601,46 @@ class ApiDBTestCase(ApiTestCase):
         )
         return self.task_status_done
 
-    def generate_fixture_task_status_todo(self):
-        self.task_status_todo = TaskStatus.create(
-            name="Todo", short_name="todo", color="#FFFFFF"
+    def generate_fixture_task_status_wfa(self):
+        self.task_status_wfa = TaskStatus.create(
+            name="Waiting For Approval",
+            short_name="wfa",
+            color="#FFFFFF",
+            is_feedback_request=True,
         )
+        return self.task_status_wfa.serialize()
+
+    def generate_fixture_task_status_todo(self):
+        self.task_status_todo = tasks_service.get_default_status()
         return self.task_status_todo
+
+    def generate_fixture_status_automation_to_status(self):
+        self.status_automation_to_status = StatusAutomation.create(
+            entity_type="asset",
+            in_task_type_id=self.task_type_concept.id,
+            in_task_status_id=self.task_status_done.id,
+            out_field_type="status",
+            out_task_type_id=self.task_type_modeling.id,
+            out_task_status_id=self.task_status_wip.id,
+        )
+        projects_service.add_status_automation_setting(
+            self.project_id, self.status_automation_to_status.id
+        )
+        return self.status_automation_to_status
+
+    def generate_fixture_status_automation_to_ready_for(self):
+        self.status_automation_to_ready_for = StatusAutomation.create(
+            entity_type="asset",
+            in_task_type_id=self.task_type_modeling.id,
+            in_task_status_id=self.task_status_done.id,
+            out_field_type="ready_for",
+            out_task_type_id=self.task_type_layout.id,
+            out_task_status_id=None,
+        )
+        projects_service.add_status_automation_setting(
+            self.project_id, self.status_automation_to_ready_for.id
+        )
+        return self.status_automation_to_ready_for
 
     def generate_fixture_assigner(self):
         self.assigner = Person.create(first_name="Ema", last_name="Peel")
@@ -656,6 +715,23 @@ class ApiDBTestCase(ApiTestCase):
         self.project.team.append(self.person)
         self.project.save()
         return self.shot_task
+
+    def generate_fixture_edit_task(self, name="Edit", task_type_id=None):
+        if task_type_id is None:
+            task_type_id = self.task_type_edit.id
+
+        self.edit_task = Task.create(
+            name=name,
+            project_id=self.project.id,
+            task_type_id=task_type_id,
+            task_status_id=self.task_status.id,
+            entity_id=self.edit.id,
+            assignees=[self.person],
+            assigner_id=self.assigner.id,
+        )
+        self.project.team.append(self.person)
+        self.project.save()
+        return self.edit_task
 
     def generate_fixture_episode_task(self, name="Master"):
         self.episode_task = Task.create(
@@ -928,6 +1004,16 @@ class ApiDBTestCase(ApiTestCase):
             person_id = self.person.id
         self.day_off = DayOff.create(date=date, person_id=person_id)
         return self.day_off.serialize()
+
+    def generate_fixture_edit(self, name="Edit", parent_id=None):
+        self.edit = Entity.create(
+            name=name,
+            description="Description of the Edit",
+            project_id=self.project.id,
+            entity_type_id=self.edit_type.id,
+            parent_id=parent_id,
+        )
+        return self.edit
 
     def generate_base_context(self):
         self.generate_fixture_project_status()

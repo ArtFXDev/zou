@@ -7,12 +7,12 @@ import datetime
 
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE
 from zou.app.utils import thumbnail as thumbnail_utils
-from zou.app.utils import auth
 from zou.app.stores import auth_tokens_store, file_store
 from zou.app.services import (
     assets_service,
     backup_service,
     deletion_service,
+    edits_service,
     persons_service,
     projects_service,
     shots_service,
@@ -69,6 +69,9 @@ def init_data():
     shots_service.get_sequence_type()
     shots_service.get_shot_type()
     print("Shot types initialized.")
+
+    edits_service.get_edit_type()
+    print("Edit type initialized.")
 
     modeling = tasks_service.get_or_create_department("Modeling")
     animation = tasks_service.get_or_create_department("Animation")
@@ -133,17 +136,26 @@ def init_data():
         for_shots=True,
         for_entity="Shot",
     )
+    tasks_service.get_or_create_task_type(
+        compositing,
+        "Edit",
+        "#9b298c",
+        priority=8,
+        for_shots=False,
+        for_entity="Edit",
+    )
     print("Task types initialized.")
 
-    tasks_service.get_or_create_status("Todo", "todo", "#f5f5f5")
+    tasks_service.get_default_status()
     tasks_service.get_or_create_status("Work In Progress", "wip", "#3273dc")
     tasks_service.get_or_create_status(
-        "Waiting For Approval", "wfa", "#ab26ff"
+        "Waiting For Approval", "wfa", "#ab26ff", is_feedback_request=True
     )
     tasks_service.get_or_create_status(
         "Retake", "retake", "#ff3860", is_retake=True
     )
     tasks_service.get_or_create_status("Done", "done", "#22d160", is_done=True)
+
     print("Task status initialized.")
 
 
@@ -290,7 +302,6 @@ def sync_with_ldap_server():
 
             elif person is not None:
                 try:
-                    active = True
                     persons_service.update_person(
                         person["id"],
                         {
@@ -455,8 +466,3 @@ def remove_old_data(days_old=90):
     print("Removing old notitfications...")
     deletion_service.remove_old_notifications(days_old)
     print("Old data removed.")
-
-
-def reset_user_password(user_email):
-    password = auth.encrypt_password("default")
-    persons_service.update_password(user_email, password)

@@ -1,27 +1,35 @@
-FROM python:3.7-alpine3.14
+ARG PY_V=3.7
+ARG ZOU_VERSION=0.14.2
 
+FROM python:${PY_V}-alpine as builder
 USER root
 
-RUN apk add --no-cache ffmpeg bzip2 libpq postgresql-client\
-    && apk add --no-cache --virtual .build-deps make jpeg-dev zlib-dev musl-dev gcc g++ libffi-dev postgresql-dev
+RUN apk add --no-cache make jpeg-dev zlib-dev musl-dev gcc g++ libffi-dev postgresql-dev
 
+ARG PY_V
 ARG ZOU_VERSION
 
-COPY ./requirements.txt /opt/zou/requirements.txt
-COPY ./setup.py /opt/zou/setup.py
-COPY ./setup.cfg /opt/zou/setup.cfg
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools \
+    && pip install --no-cache-dir zou==${ZOU_VERSION} 
+    
 
-WORKDIR /opt/zou
-RUN pip install -r requirements.txt
+FROM python:${PY_V}-alpine
+MAINTAINER "Mathieu Bouzard <mathieu.bouzard@gmail.com>"
+USER root
 
-COPY . /opt/zou
+RUN apk add --no-cache ffmpeg bzip2 postgresql-libs postgresql-client
 
-RUN pip install --upgrade pip wheel setuptools
-RUN pip install .
-RUN apk del .build-deps
+ARG PY_V
 
-ENV ZOU_FOLDER /usr/local/lib/python3.7/site-packages/zou
+COPY --from=builder /usr/local/lib/python${PY_V} /usr/local/lib/python${PY_V}
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+ENV ZOU_FOLDER /usr/local/lib/python${PY_V}/site-packages/zou
 WORKDIR ${ZOU_FOLDER}
 
-COPY scripts/init_zou.sh ./init_zou.sh
-COPY scripts/upgrade_zou.sh ./upgrade_zou.sh
+COPY init_zou.sh /init_zou.sh
+COPY upgrade_zou.sh /upgrade_zou.sh
+
+# TEMP LINKS
+RUN ln /init_zou.sh ./init_zou.sh &&\
+    ln /upgrade_zou.sh ./upgrade_zou.sh

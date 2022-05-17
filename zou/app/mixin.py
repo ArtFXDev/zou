@@ -79,6 +79,12 @@ class ArgsMixin(object):
         """
         return self.get_text_parameter("episode_id")
 
+    def get_task_type_id(self):
+        """
+        Returns Task type ID parameter.
+        """
+        return self.get_text_parameter("task_type_id")
+
     def get_no_job(self):
         """
         Returns no_job parameter.
@@ -89,9 +95,9 @@ class ArgsMixin(object):
         options = request.args
         return options.get(field_name, None)
 
-    def get_bool_parameter(self, field_name):
+    def get_bool_parameter(self, field_name, default="false"):
         options = request.args
-        return options.get(field_name, "false") == "true"
+        return options.get(field_name, default) == "true"
 
     def get_date_parameter(self, field_name):
         self.parse_date_parameter(self.get_text_parameter(field_name))

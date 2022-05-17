@@ -21,7 +21,7 @@ from zou.app.models.entity_type import EntityType
 from zou.app.models.news import News
 from zou.app.models.person import Person
 from zou.app.models.preview_file import PreviewFile
-from zou.app.models.project import Project, ProjectTaskTypeLink
+from zou.app.models.project import Project
 from zou.app.models.task import Task
 from zou.app.models.task_type import TaskType
 from zou.app.models.task_status import TaskStatus
@@ -47,6 +47,7 @@ from zou.app.services import (
     projects_service,
     shots_service,
     entities_service,
+    edits_service,
 )
 
 
@@ -83,6 +84,9 @@ def get_departments():
 
 @cache.memoize_function(120)
 def get_task_types():
+    for task_type in TaskType.get_all():
+        if task_type.for_shots and task_type.for_entity != "Shot":
+            task_type.update({"for_entity": "Shot"})
     return fields.serialize_models(TaskType.get_all())
 
 
@@ -92,25 +96,13 @@ def get_task_statuses():
 
 
 @cache.memoize_function(120)
-def get_done_status():
-    return get_or_create_status(
-        app.config["DONE_TASK_STATUS"], "done", is_done=True
-    )
-
-
-@cache.memoize_function(120)
-def get_wip_status():
-    return get_or_create_status(app.config["WIP_TASK_STATUS"], "wip")
-
-
-@cache.memoize_function(120)
 def get_to_review_status():
     return get_or_create_status(app.config["TO_REVIEW_TASK_STATUS"], "pndng")
 
 
 @cache.memoize_function(120)
-def get_todo_status():
-    return get_or_create_status("Todo")
+def get_default_status():
+    return get_or_create_status("Todo", "todo", "#f5f5f5", is_default=True)
 
 
 def get_task_status_raw(task_status_id):
@@ -135,7 +127,6 @@ def get_department(department_id):
     """
     Get department matching given id as a dictionary.
     """
-    print(department_id)
     try:
         department = Department.get(department_id)
     except StatementError:
@@ -267,6 +258,14 @@ def get_tasks_for_episode(episode_id, relations=False):
     return get_task_dicts_for_entity(episode.id, relations=relations)
 
 
+def get_tasks_for_edit(edit_id, relations=False):
+    """
+    Get all tasks for given edit.
+    """
+    edit = edits_service.get_edit(edit_id)
+    return get_task_dicts_for_entity(edit["id"], relations=relations)
+
+
 def get_shot_tasks_for_sequence(sequence_id, relations=False):
     """
     Get all shot tasks for given sequence.
@@ -278,12 +277,24 @@ def get_shot_tasks_for_sequence(sequence_id, relations=False):
 
 def get_shot_tasks_for_episode(episode_id, relations=False):
     """
-    Get all shot tasks for given episode.
+    Get all shots tasks for given episode.
     """
     query = _get_entity_task_query()
     Sequence = aliased(Entity, name="sequence")
     query = query.join(Sequence, Entity.parent_id == Sequence.id).filter(
         Sequence.parent_id == episode_id
+    )
+    return _convert_rows_to_detailed_tasks(query.all(), relations)
+
+
+def get_asset_tasks_for_episode(episode_id, relations=False):
+    """
+    Get all assets tasks for given episode.
+    """
+    query = (
+        _get_entity_task_query()
+        .filter(assets_service.build_asset_type_filter())
+        .filter(Entity.source_id == episode_id)
     )
     return _convert_rows_to_detailed_tasks(query.all(), relations)
 
@@ -413,6 +424,13 @@ def get_task_types_for_project(project_id):
         .all()
     )
     return fields.serialize_models(task_types)
+
+
+def get_task_types_for_edit(edit_id):
+    """
+    Return all task types for which there is a task related to given edit.
+    """
+    return get_task_types_for_entity(edit_id)
 
 
 def get_task_type_map():
@@ -692,6 +710,18 @@ def get_tasks_for_entity_and_task_type(entity_id, task_type_id):
     return Task.serialize_list(tasks)
 
 
+def get_tasks_for_project_and_task_type(project_id, task_type_id):
+    """
+    For a project and a task type returns all tasks.
+    """
+    tasks = (
+        Task.query.filter_by(project_id=project_id, task_type_id=task_type_id)
+        .order_by(Task.name)
+        .all()
+    )
+    return Task.serialize_list(tasks)
+
+
 def get_task_status_map():
     """
     Return a dict of which keys are task status ids and values are task
@@ -718,7 +748,6 @@ def get_person_related_tasks(person_id, task_type_id):
     projects = projects_service.open_projects()
     project_ids = [project["id"] for project in projects]
 
-    AssignedTask = aliased(Entity, name="sequence")
     entities = (
         Entity.query.join(Task, Entity.id == Task.entity_id)
         .filter(Task.assignees.contains(person))
@@ -825,6 +854,7 @@ def get_person_tasks(person_id, projects, is_done=None):
                 "episode_name": episode_name,
                 "task_estimation": task.estimation,
                 "task_duration": task.duration,
+                "task_start_date": fields.serialize_value(task.start_date),
                 "task_due_date": fields.serialize_value(task.due_date),
                 "task_type_name": task_type_name,
                 "task_status_name": task_status_name,
@@ -870,7 +900,7 @@ def create_tasks(task_type, entities):
     """
     Create a new task for given task type and for each entity.
     """
-    task_status = get_todo_status()
+    task_status = get_default_status()
     current_user_id = None
     try:
         current_user_id = persons_service.get_current_user()["id"]
@@ -914,7 +944,7 @@ def create_task(task_type, entity, name="main"):
     """
     Create a new task for given task type and entity.
     """
-    task_status = get_todo_status()
+    task_status = get_default_status()
     try:
         try:
             current_user_id = persons_service.get_current_user()["id"]
@@ -982,13 +1012,24 @@ def update_task(task_id, data):
 
 
 def get_or_create_status(
-    name, short_name="", color="#f5f5f5", is_done=False, is_retake=False
+    name,
+    short_name="",
+    color="#f5f5f5",
+    is_done=False,
+    is_retake=False,
+    is_feedback_request=False,
+    is_default=None,
 ):
     """
     Create a new task status if it doesn't exist. If it exists, it returns the
     status from database.
     """
-    task_status = TaskStatus.get_by(name=name)
+    if is_default:
+        task_status = TaskStatus.get_by(
+            is_default=is_default,
+        )
+    else:
+        task_status = TaskStatus.get_by(name=name)
     if task_status is None and len(short_name) > 0:
         task_status = TaskStatus.get_by(short_name=short_name)
 
@@ -997,9 +1038,10 @@ def get_or_create_status(
             name=name,
             short_name=short_name or name.lower(),
             color=color,
-            is_reviewable=True,
             is_done=is_done,
             is_retake=is_retake,
+            is_feedback_request=is_feedback_request,
+            is_default=is_default,
         )
         events.emit("task-status:new", {"task_status_id": task_status.id})
     return task_status.serialize()
@@ -1053,6 +1095,7 @@ def get_or_create_task_type(
             color=color,
             priority=priority,
             for_shots=for_shots,
+            for_entity=for_entity,
             shotgun_id=shotgun_id,
         )
         events.emit("task-type:new", {"task_type_id": task_type.id})
@@ -1089,6 +1132,7 @@ def create_or_update_time_spent(task_id, person_id, date, duration, add=False):
         time_spent = TimeSpent.create(
             task_id=task_id, person_id=person_id, date=date, duration=duration
         )
+        persons_service.update_person_last_presence(person_id)
         events.emit(
             "time-spent:new",
             {"time_spent_id": str(time_spent.id)},
@@ -1113,22 +1157,35 @@ def is_finished(task, data):
     if "task_status_id" in data:
         task_status = get_task_status_raw(task.task_status_id)
         new_task_status = get_task_status_raw(data["task_status_id"])
-        return new_task_status.id != task_status.id and new_task_status.is_done
+        return (
+            new_task_status.id != task_status.id
+            and new_task_status.is_feedback_request
+        )
     else:
         return False
 
 
-def clear_assignation(task_id):
+def clear_assignation(task_id, person_id=None):
     """
     Clear task assignation and emit a *task:unassign* event.
     """
     task = get_task_raw(task_id)
     project_id = str(task.project_id)
-    assignees = [person.serialize() for person in task.assignees]
-    task.update({"assignees": []})
+
+    removed_assignments = []
+    if person_id is None:
+        removed_assignments = [person.serialize() for person in task.assignees]
+        task.update({"assignees": []})
+    else:
+        assignees = [
+            person for person in task.assignees if str(person.id) != person_id
+        ]
+        task.update({"assignees": assignees})
+        removed_assignments = [{"id": person_id}]
+
     clear_task_cache(task_id)
     task_dict = task.serialize()
-    for assignee in assignees:
+    for assignee in removed_assignments:
         events.emit(
             "task:unassign",
             {"person_id": assignee["id"], "task_id": task_id},
@@ -1156,40 +1213,6 @@ def assign_task(task_id, person_id):
     clear_task_cache(task_id)
     events.emit("task:update", {"task_id": task_id}, project_id=project_id)
     return task_dict
-
-
-def start_task(task_id):
-    """
-    Deprecated
-    Change the task status to wip if it is not already the case. It emits a
-    *task:start* event. Change the real start date time to now.
-    """
-    task = get_task_raw(task_id)
-    wip_status = get_wip_status()
-    task_is_not_already_wip = (
-        task.task_status_id is None or task.task_status_id != wip_status["id"]
-    )
-
-    if task_is_not_already_wip:
-        task_dict_before = task.serialize()
-
-        new_data = {"task_status_id": wip_status["id"]}
-        if task.real_start_date is None:
-            new_data["real_start_date"] = datetime.datetime.now()
-
-        task.update(new_data)
-        clear_task_cache(task_id)
-        events.emit(
-            "task:start",
-            {
-                "task_id": task_id,
-                "previous_task_status_id": task_dict_before["task_status_id"],
-                "real_start_date": task.real_start_date,
-                "shotgun_id": task_dict_before["shotgun_id"],
-            },
-        )
-
-    return task.serialize()
 
 
 def task_to_review(
@@ -1340,10 +1363,14 @@ def get_full_task(task_id):
         pass
 
     if entity["parent_id"] is not None:
-        sequence = shots_service.get_sequence(entity["parent_id"])
-        task["sequence"] = sequence
-        if sequence["parent_id"] is not None:
-            episode = shots_service.get_episode(sequence["parent_id"])
+        if entity_type["name"] == "Edit":
+            episode_id = entity["parent_id"]
+        else:
+            sequence = shots_service.get_sequence(entity["parent_id"])
+            task["sequence"] = sequence
+            episode_id = sequence["parent_id"]
+        if episode_id is not None:
+            episode = shots_service.get_episode(episode_id)
             task["episode"] = episode
 
     return task
@@ -1361,13 +1388,15 @@ def reset_task_data(task_id):
     real_start_date = None
     last_comment_date = None
     end_date = None
-    task_status_id = TaskStatus.get_by(short_name="todo").id
+    task_status_id = get_default_status()["id"]
     comments = (
         Comment.query.join(TaskStatus)
         .filter(Comment.object_id == task_id)
         .order_by(Comment.created_at)
         .add_columns(
-            TaskStatus.is_retake, TaskStatus.is_done, TaskStatus.short_name
+            TaskStatus.is_retake,
+            TaskStatus.is_feedback_request,
+            TaskStatus.short_name,
         )
         .all()
     )
@@ -1376,7 +1405,7 @@ def reset_task_data(task_id):
     for (
         comment,
         task_status_is_retake,
-        task_status_is_done,
+        task_status_is_feedback_request,
         task_status_short_name,
     ) in comments:
         if task_status_is_retake and not previous_is_retake:
@@ -1386,7 +1415,7 @@ def reset_task_data(task_id):
         if task_status_short_name.lower() == "wip" and real_start_date is None:
             real_start_date = comment.created_at
 
-        if task_status_is_done:
+        if task_status_is_feedback_request:
             end_date = comment.created_at
         else:
             end_date = None

@@ -13,6 +13,8 @@ from .resources import (
     ProductionTaskTypesResource,
     ProductionTaskStatusResource,
     ProductionTaskStatusRemoveResource,
+    ProductionStatusAutomationResource,
+    ProductionStatusAutomationRemoveResource,
     ProductionMetadataDescriptorResource,
     ProductionMetadataDescriptorsResource,
     ProductionMilestonesResource,
@@ -22,16 +24,12 @@ from .resources import (
     ProductionEpisodesScheduleItemsResource,
     ProductionSequencesScheduleItemsResource,
     ProductionTimeSpentsResource,
-    ProductionProgressResource,
-    ProductionsProgressResource,
 )
 
 routes = [
     ("/data/projects/open", OpenProjectsResource),
     ("/data/projects/all", AllProjectsResource),
-    ("/data/projects/progress", ProductionsProgressResource),
     ("/data/projects/<project_id>/team", ProductionTeamResource),
-    ("/data/projects/<project_id>/progress", ProductionProgressResource),
     (
         "/data/projects/<project_id>/task-types",
         ProductionTaskTypesResource,
@@ -63,6 +61,14 @@ routes = [
     (
         "/data/projects/<project_id>/settings/task-status/<task_status_id>",
         ProductionTaskStatusRemoveResource,
+    ),
+    (
+        "/data/projects/<project_id>/settings/status-automations",
+        ProductionStatusAutomationResource,
+    ),
+    (
+        "/data/projects/<project_id>/settings/status-automations/<status_automation_id>",
+        ProductionStatusAutomationRemoveResource,
     ),
     (
         "/data/projects/<project_id>/metadata-descriptors",

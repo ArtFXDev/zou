@@ -8,8 +8,6 @@ from .resources import (
     ShotsAndTasksResource,
     ShotAssetsResource,
     ShotPreviewsResource,
-    ShotValidationResource,
-    ShotRenderTimeResource,
     ShotTaskTypesResource,
     ShotTasksResource,
     ShotVersionsResource,
@@ -41,7 +39,9 @@ from .resources import (
     SequenceTasksResource,
     SequenceTaskTypesResource,
     EpisodeShotTasksResource,
+    EpisodeAssetTasksResource,
     SequenceShotTasksResource,
+    ProjectQuotasResource,
 )
 
 routes = [
@@ -54,8 +54,6 @@ routes = [
     ("/data/shots/<shot_id>/tasks", ShotTasksResource),
     ("/data/shots/<shot_id>/preview-files", ShotPreviewsResource),
     ("/data/shots/<shot_id>/versions", ShotVersionsResource),
-    ("/data/shots/<shot_id>/validation", ShotValidationResource),
-    ("/data/shots/<shot_id>/render-time", ShotRenderTimeResource),
     ("/data/scenes/all", ScenesResource),
     ("/data/scenes/with-tasks", SceneAndTasksResource),
     ("/data/scenes/<scene_id>", SceneResource),
@@ -71,6 +69,7 @@ routes = [
     ("/data/episodes/<episode_id>/tasks", EpisodeTasksResource),
     ("/data/episodes/<episode_id>/task-types", EpisodeTaskTypesResource),
     ("/data/episodes/<episode_id>/shot-tasks", EpisodeShotTasksResource),
+    ("/data/episodes/<episode_id>/asset-tasks", EpisodeAssetTasksResource),
     ("/data/sequences", SequencesResource),
     ("/data/sequences/with-tasks", SequenceAndTasksResource),
     ("/data/sequences/<sequence_id>", SequenceResource),
@@ -90,6 +89,10 @@ routes = [
     (
         "/data/projects/<project_id>/episodes/retake-stats",
         ProjectEpisodeRetakeStatsResource,
+    ),
+    (
+        "/data/projects/<project_id>/quotas/<task_type_id>",
+        ProjectQuotasResource,
     ),
 ]
 

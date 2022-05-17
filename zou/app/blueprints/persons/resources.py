@@ -10,8 +10,8 @@ from zou.app.services import (
     persons_service,
     tasks_service,
     time_spents_service,
+    shots_service,
     user_service,
-    gaming_service,
 )
 from zou.app.utils import auth, permissions, csv_utils
 from zou.app.services.exception import (
@@ -222,6 +222,79 @@ class PersonDayTimeSpentsResource(Resource, ArgsMixin):
             abort(404)
 
 
+class PersonMonthQuotaShotsResource(Resource, ArgsMixin):
+    """
+    Get ended shots used for quota calculation of this month.
+    """
+
+    @jwt_required
+    def get(self, person_id, year, month):
+        project_id = self.get_project_id()
+        task_type_id = self.get_task_type_id()
+        user_service.check_person_access(person_id)
+        weighted = self.get_bool_parameter("weighted", default="true")
+        try:
+            return shots_service.get_month_quota_shots(
+                person_id,
+                year,
+                month,
+                project_id=project_id,
+                task_type_id=task_type_id,
+                weighted=weighted,
+            )
+        except WrongDateFormatException:
+            abort(404)
+
+
+class PersonWeekQuotaShotsResource(Resource, ArgsMixin):
+    """
+    Get ended shots used for quota calculation of this week.
+    """
+
+    @jwt_required
+    def get(self, person_id, year, week):
+        project_id = self.get_project_id()
+        task_type_id = self.get_task_type_id()
+        user_service.check_person_access(person_id)
+        weighted = self.get_bool_parameter("weighted", default="true")
+        try:
+            return shots_service.get_week_quota_shots(
+                person_id,
+                year,
+                week,
+                project_id=project_id,
+                task_type_id=task_type_id,
+                weighted=weighted,
+            )
+        except WrongDateFormatException:
+            abort(404)
+
+
+class PersonDayQuotaShotsResource(Resource, ArgsMixin):
+    """
+    Get ended shots used for quota calculation of this day.
+    """
+
+    @jwt_required
+    def get(self, person_id, year, month, day):
+        project_id = self.get_project_id()
+        task_type_id = self.get_task_type_id()
+        user_service.check_person_access(person_id)
+        weighted = self.get_bool_parameter("weighted", default="true")
+        try:
+            return shots_service.get_day_quota_shots(
+                person_id,
+                year,
+                month,
+                day,
+                project_id=project_id,
+                task_type_id=task_type_id,
+                weighted=weighted,
+            )
+        except WrongDateFormatException:
+            abort(404)
+
+
 class TimeSpentMonthResource(Resource, ArgsMixin):
     """
     Return a table giving time spent by user and by day for given year and
@@ -399,25 +472,3 @@ class RemoveFromDepartmentResource(Resource, ArgsMixin):
             )
         persons_service.remove_from_department(department_id, person_id)
         return "", 204
-
-
-class ScoresResource(Resource, ArgsMixin):
-    def get(self, person_id):
-        (game, page_size, page_index) = self.get_argument()
-        return gaming_service.get_scores_by_player(
-            person_id, game=game, page_size=page_size, page_index=page_index
-        )
-
-    def get_argument(self):
-        parser = reqparse.RequestParser()
-        parser.add_argument("game", type=str)
-        parser.add_argument("page_size", type=int)
-        parser.add_argument("page_index", type=int, default=0)
-        args = parser.parse_args()
-
-        return args["game"], args["page_size"], args["page_index"]
-
-
-class GameVariantsResource(Resource, ArgsMixin):
-    def get(self, person_id):
-        return gaming_service.get_owned_game_variant(person_id)

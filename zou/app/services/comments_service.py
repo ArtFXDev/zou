@@ -1,4 +1,5 @@
 import datetime
+import os
 import re
 
 from flask import current_app
@@ -6,19 +7,25 @@ from flask import current_app
 from zou.app.models.attachment_file import AttachmentFile
 from zou.app.models.comment import Comment
 from zou.app.models.notification import Notification
-from zou.app.models.project import Project
+from zou.app.models.project import Project, ProjectTaskTypeLink
 from zou.app.models.task import Task
 
 from zou.app.services import (
+    assets_service,
     base_service,
+    breakdown_service,
     news_service,
     notifications_service,
     persons_service,
+    projects_service,
     tasks_service,
 )
-from zou.app.services.exception import AttachmentFileNotFoundException
+from zou.app.services.exception import (
+    AttachmentFileNotFoundException,
+    AssetNotFoundException,
+)
 
-from zou.app.utils import cache, date_helpers, events, fields, fs, fields
+from zou.app.utils import cache, date_helpers, events, fs, fields
 from zou.app.stores import file_store
 from zou.app import config
 
@@ -53,7 +60,7 @@ def get_attachment_file_path(attachment_file):
 
 
 def create_comment(
-    person_id, task_id, task_status_id, comment, checklist, files, created_at
+    person_id, task_id, task_status_id, text, checklist, files, created_at
 ):
     """
     Create a new comment and related: news, notifications and events.
@@ -67,7 +74,7 @@ def create_comment(
         files=files,
         person_id=author["id"],
         task_status_id=task_status_id,
-        text=comment,
+        text=text,
         checklist=checklist,
         created_at=created_at,
     )
@@ -75,6 +82,12 @@ def create_comment(
     _manage_subscriptions(task, comment, status_changed)
     comment["task_status"] = task_status
     comment["person"] = author
+
+    status_automations = projects_service.get_project_status_automations(
+        task["project_id"]
+    )
+    for automation in status_automations:
+        _run_status_automation(automation, task, person_id)
     return comment
 
 
@@ -99,7 +112,7 @@ def _manage_status_change(task_status, task, comment):
                 retake_count = 0
             new_data["retake_count"] = retake_count + 1
 
-        if task_status["is_done"]:
+        if task_status["is_feedback_request"]:
             new_data["end_date"] = datetime.datetime.now()
         else:
             new_data["end_date"] = None
@@ -133,6 +146,63 @@ def _manage_subscriptions(task, comment, status_changed):
     news_service.create_news_for_task_and_comment(
         task, comment, created_at=comment["created_at"], change=status_changed
     )
+
+
+def _run_status_automation(automation, task, person_id):
+    is_automation_to_run = (
+        task["task_type_id"] == automation["in_task_type_id"]
+        and task["task_status_id"] == automation["in_task_status_id"]
+    )
+    if not is_automation_to_run:
+        return
+
+    priorities = projects_service.get_task_type_priority_map(
+        task["project_id"], automation["entity_type"].capitalize()
+    )
+    in_priority = priorities.get(automation["in_task_type_id"], 0)
+    out_priority = priorities.get(automation["out_task_type_id"], 0) or 0
+    is_rollback = (
+        priorities is not None
+        and automation["out_field_type"] != "ready_for"
+        and in_priority > out_priority
+    )
+    if is_rollback:  # Do not apply rollback to avoid change cycles.
+        return
+
+    if automation["out_field_type"] == "status":
+        tasks_to_update = tasks_service.get_tasks_for_entity_and_task_type(
+            task["entity_id"], automation["out_task_type_id"]
+        )
+        if len(tasks_to_update) > 0:
+            task_to_update = tasks_to_update[0]
+            task_type = tasks_service.get_task_type(
+                automation["in_task_type_id"]
+            )
+            task_status = tasks_service.get_task_status(
+                automation["in_task_status_id"]
+            )
+            create_comment(
+                person_id,
+                task_to_update["id"],
+                automation["out_task_status_id"],
+                "Change triggered by %s set to %s"
+                % (
+                    task_type["name"],
+                    task_status["name"],
+                ),
+                [],
+                {},
+                None,
+            )
+    elif automation["out_field_type"] == "ready_for":
+        try:
+            asset = assets_service.update_asset(
+                task["entity_id"],
+                {"ready_for": automation["out_task_type_id"]},
+            )
+            breakdown_service.refresh_casting_stats(asset)
+        except AssetNotFoundException:
+            pass
 
 
 def new_comment(
@@ -241,6 +311,7 @@ def create_attachment(comment, uploaded_file):
     size = fs.get_file_size(tmp_file_path)
     attachment_file.update({"size": size})
     file_store.add_file("attachments", attachment_file_id, tmp_file_path)
+    os.remove(tmp_file_path)
     return attachment_file.present()
 
 
@@ -253,6 +324,18 @@ def get_all_attachment_files_for_project(project_id):
         AttachmentFile.query.join(Comment)
         .join(Task, Task.id == Comment.object_id)
         .filter(Task.project_id == project_id)
+    )
+    return fields.serialize_models(attachment_files)
+
+
+def get_all_attachment_files_for_task(task_id):
+    """
+    Return all attachment files listed into given task.
+    """
+    attachment_files = (
+        AttachmentFile.query.join(Comment)
+        .join(Task, Task.id == Comment.object_id)
+        .filter(Task.id == task_id)
     )
     return fields.serialize_models(attachment_files)
 

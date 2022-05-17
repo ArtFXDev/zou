@@ -31,7 +31,8 @@ def init_db():
 
 
 @cli.command()
-def migrate_db():
+@click.option("--message", default="")
+def migrate_db(message):
     """
     Generate migration files to describe a new revision of the database schema
     (for development only).
@@ -43,24 +44,61 @@ def migrate_db():
         import zou
 
         directory = os.path.join(os.path.dirname(zou.__file__), "migrations")
-        flask_migrate.migrate(directory=directory)
+        flask_migrate.migrate(directory=directory, message=message)
+
+
+@cli.command()
+@click.option("--revision", default=None)
+def downgrade_db(revision):
+    """
+    Downgrade db to previous revision of the database schema
+    (for development only). For revision you can use an hash or a relative migration identifier.
+    """
+
+    from zou.app import app
+
+    with app.app_context():
+        import zou
+
+        directory = os.path.join(os.path.dirname(zou.__file__), "migrations")
+        flask_migrate.downgrade(directory=directory, revision=revision)
 
 
 @cli.command()
 def clear_db():
     "Drop all tables from database"
 
-    print("Deleting database and tables...")
-    dbhelpers.drop_all()
-    print("Database and tables deleted.")
+    from zou.app import app
+
+    with app.app_context():
+        import zou
+
+        print("Deleting database and tables...")
+        dbhelpers.drop_all()
+        print("Database and tables deleted.")
+
+        directory = os.path.join(os.path.dirname(zou.__file__), "migrations")
+        flask_migrate.stamp(directory=directory, revision="base")
 
 
 @cli.command()
 def reset_db():
     "Drop all tables then recreates them."
 
-    clear_db()
-    dbhelpers.create_all()
+    from zou.app import app
+
+    with app.app_context():
+        import zou
+
+        print("Deleting database and tables...")
+        dbhelpers.drop_all()
+        print("Database and tables deleted.")
+
+        directory = os.path.join(os.path.dirname(zou.__file__), "migrations")
+        flask_migrate.stamp(directory=directory, revision="base")
+
+        flask_migrate.upgrade(directory=directory)
+        print("Database and tables created.")
 
 
 @cli.command()
@@ -90,8 +128,7 @@ def stamp_db():
 
 
 @cli.command()
-@click.argument("revision", default="base")
-def reset_migrations(revision):
+def reset_migrations():
     "Set the database schema revision to first one."
 
     from zou.app import app
@@ -100,7 +137,7 @@ def reset_migrations(revision):
         import zou
 
         directory = os.path.join(os.path.dirname(zou.__file__), "migrations")
-        flask_migrate.stamp(directory=directory, revision=revision)
+        flask_migrate.stamp(directory=directory, revision="base")
 
 
 @cli.command()
@@ -336,15 +373,6 @@ def remove_old_data(days):
     (by deafult).
     """
     commands.remove_old_data(days)
-
-
-@cli.command()
-@click.option("--user")
-def reset_user_password(user):
-    """
-    Reset a password for the given user email to default
-    """
-    commands.reset_user_password(user)
 
 
 if __name__ == "__main__":

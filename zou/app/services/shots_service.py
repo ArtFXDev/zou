@@ -1,21 +1,31 @@
-import re
-
+from datetime import timedelta
+from operator import itemgetter
 from sqlalchemy.orm import aliased
 from sqlalchemy.exc import IntegrityError, StatementError
 
-from zou.app.utils import cache, events, fields, query as query_utils
+from zou.app.utils import (
+    cache,
+    date_helpers,
+    events,
+    fields,
+    query as query_utils,
+)
 
 from zou.app.models.entity import Entity, EntityLink, EntityVersion
+from zou.app.models.person import Person
 from zou.app.models.project import Project
 from zou.app.models.schedule_item import ScheduleItem
 from zou.app.models.subscription import Subscription
 from zou.app.models.task import Task
 from zou.app.models.task import assignees_table
+from zou.app.models.time_spent import TimeSpent
 
 from zou.app.services import (
     deletion_service,
     entities_service,
+    persons_service,
     projects_service,
+    names_service,
     user_service,
 )
 from zou.app.services.exception import (
@@ -43,34 +53,24 @@ def clear_episode_cache(episode_id):
     cache.cache.delete_memoized(get_episode, episode_id)
 
 
-def get_temporal_entity_type_by_name(name):
-    entity_type = entities_service.get_entity_type_by_name(name)
-    if entity_type is None:
-        cache.cache.delete_memoized(
-            entities_service.get_entity_type_by_name, name
-        )
-        entity_type = entities_service.get_entity_type_by_name(name)
-    return entity_type
-
-
 @cache.memoize_function(1200)
 def get_episode_type():
-    return get_temporal_entity_type_by_name("Episode")
+    return entities_service.get_temporal_entity_type_by_name("Episode")
 
 
 @cache.memoize_function(1200)
 def get_sequence_type():
-    return get_temporal_entity_type_by_name("Sequence")
+    return entities_service.get_temporal_entity_type_by_name("Sequence")
 
 
 @cache.memoize_function(1200)
 def get_shot_type():
-    return get_temporal_entity_type_by_name("Shot")
+    return entities_service.get_temporal_entity_type_by_name("Shot")
 
 
 @cache.memoize_function(1200)
 def get_scene_type():
-    return get_temporal_entity_type_by_name("Scene")
+    return entities_service.get_temporal_entity_type_by_name("Scene")
 
 
 @cache.memoize_function(1200)
@@ -476,7 +476,7 @@ def get_sequence_from_shot(shot):
     """
     try:
         sequence = Entity.get(shot["parent_id"])
-    except:
+    except Exception:
         raise SequenceNotFoundException("Wrong parent_id for given shot.")
     return sequence.serialize(obj_type="Sequence")
 
@@ -525,7 +525,7 @@ def get_episode_from_sequence(sequence):
     """
     try:
         episode = Entity.get(sequence["parent_id"])
-    except:
+    except Exception:
         raise EpisodeNotFoundException("Wrong parent_id for given sequence.")
     return episode.serialize(obj_type="Episode")
 
@@ -860,6 +860,7 @@ def remove_sequence(sequence_id, force=False):
         ScheduleItem.delete_all_by(object_id=sequence_id)
     try:
         sequence.delete()
+        events.emit("sequence:delete", {"sequence_id": sequence_id})
     except IntegrityError:
         raise ModelWithRelationsDeletionException(
             "Some data are still linked to this sequence."
@@ -914,7 +915,9 @@ def create_sequence(project_id, episode_id, name):
     return sequence.serialize(obj_type="Sequence")
 
 
-def create_shot(project_id, sequence_id, name, data={}, nb_frames=0):
+def create_shot(
+    project_id, sequence_id, name, data={}, nb_frames=0, description=None
+):
     """
     Create shot for given project and sequence.
     """
@@ -938,6 +941,7 @@ def create_shot(project_id, sequence_id, name, data={}, nb_frames=0):
             name=name,
             data=data,
             nb_frames=nb_frames,
+            description=description,
         )
     events.emit(
         "shot:new",
@@ -1015,3 +1019,383 @@ def get_base_entity_type_name(entity_dict):
     elif is_episode(entity_dict):
         type_name = "Episode"
     return type_name
+
+
+def get_weighted_quotas(project_id, task_type_id, detail_level):
+    """
+    Build quota statistics. It counts the number of frames done for each day.
+    A shot is considered done at the first feedback request. If time spent is
+    filled for it, it weights the result with the frame number with the time
+    spents. If there is no time spent, it considers that the work was done
+    from the wip date to the feedback date.
+    It computes the shot count and the number of seconds too.
+    """
+    fps = projects_service.get_project_fps(project_id)
+    timezone = user_service.get_timezone()
+    shot_type = get_shot_type()
+    quotas = {}
+    query = (
+        Task.query.filter(Task.project_id == project_id)
+        .filter(Entity.entity_type_id == shot_type["id"])
+        .filter(Task.task_type_id == task_type_id)
+        .filter(Task.end_date != None)
+        .join(Entity, Entity.id == Task.entity_id)
+        .join(Project, Project.id == Task.project_id)
+        .join(TimeSpent, Task.id == TimeSpent.task_id)
+        .add_columns(
+            Entity.nb_frames,
+            TimeSpent.date,
+            TimeSpent.duration,
+            TimeSpent.person_id,
+        )
+    )
+    result = query.all()
+
+    for (task, nb_frames, date, duration, person_id) in result:
+        person_id = str(person_id)
+        if task.duration > 0 and nb_frames is not None:
+            nb_frames = round(nb_frames * (duration / task.duration))
+            _add_quota_entry(quotas, person_id, date, timezone, nb_frames, fps)
+
+    query = (
+        Task.query.filter(Task.project_id == project_id)
+        .filter(Entity.entity_type_id == shot_type["id"])
+        .filter(Task.task_type_id == task_type_id)
+        .filter(Task.real_start_date != None)
+        .filter(Task.end_date != None)
+        .filter(TimeSpent.id == None)
+        .join(Entity, Entity.id == Task.entity_id)
+        .join(Project, Project.id == Task.project_id)
+        .outerjoin(TimeSpent, Task.id == TimeSpent.task_id)
+        .join(Task.assignees)
+        .add_columns(Entity.nb_frames, Person.id)
+    )
+    result = query.all()
+
+    for (task, nb_frames, person_id) in result:
+        business_days = (
+            date_helpers.get_business_days(task.real_start_date, task.end_date)
+            + 1
+        )
+        if nb_frames is not None:
+            nb_frames = round(nb_frames / business_days) or 0
+        else:
+            nb_frames = 0
+        date = task.real_start_date
+        for x in range((task.end_date - task.real_start_date).days + 1):
+            if date.weekday() < 5:
+                _add_quota_entry(
+                    quotas, str(person_id), date, timezone, nb_frames, fps
+                )
+            date = date + timedelta(1)
+    return quotas
+
+
+def get_raw_quotas(project_id, task_type_id, detail_level):
+    """
+    Build quota statistics in a raw way. It counts the number of frames done
+    for each day. A shot is considered done at the first feedback request (end
+    date). It considers that all the work was done at the end date.
+    It computes the shot count and the number of seconds too.
+    """
+    fps = projects_service.get_project_fps(project_id)
+    timezone = user_service.get_timezone()
+    shot_type = get_shot_type()
+    quotas = {}
+    query = (
+        Task.query.filter(Task.project_id == project_id)
+        .filter(Entity.entity_type_id == shot_type["id"])
+        .filter(Task.task_type_id == task_type_id)
+        .filter(Task.end_date != None)
+        .join(Entity, Entity.id == Task.entity_id)
+        .join(Project, Project.id == Task.project_id)
+        .join(Task.assignees)
+        .add_columns(Entity.nb_frames, Person.id)
+    )
+    result = query.all()
+
+    for (task, nb_frames, person_id) in result:
+        date = task.end_date
+        if nb_frames is None:
+            nb_frames = 0
+        _add_quota_entry(
+            quotas, str(person_id), date, timezone, nb_frames, fps
+        )
+    return quotas
+
+
+def _add_quota_entry(quotas, person_id, date, timezone, nb_frames, fps):
+    nb_seconds = nb_frames / fps
+    date_str = date_helpers.get_simple_string_with_timezone_from_date(
+        date, timezone
+    )
+    year = date_str[:4]
+    week = year + "-" + str(date.isocalendar()[1])
+    month = date_str[:7]
+    if person_id not in quotas:
+        _init_quota_person(quotas, person_id)
+    _init_quota_date(quotas, person_id, date_str, week, month)
+    quotas[person_id]["day"]["frames"][date_str] += nb_frames
+    quotas[person_id]["day"]["seconds"][date_str] += nb_seconds
+    quotas[person_id]["day"]["count"][date_str] += 1
+    quotas[person_id]["week"]["frames"][week] += nb_frames
+    quotas[person_id]["week"]["seconds"][week] += nb_seconds
+    quotas[person_id]["week"]["count"][week] += 1
+    quotas[person_id]["month"]["frames"][month] += nb_frames
+    quotas[person_id]["month"]["seconds"][month] += nb_seconds
+    quotas[person_id]["month"]["count"][month] += 1
+    quotas[person_id]["year"]["frames"][year] += nb_frames
+    quotas[person_id]["year"]["seconds"][year] += nb_seconds
+    quotas[person_id]["year"]["count"][year] += 1
+
+
+def _init_quota_date(quotas, person_id, date_str, week, month):
+    year = week[:4]
+    if date_str not in quotas[person_id]["day"]["frames"]:
+        quotas[person_id]["day"]["frames"][date_str] = 0
+        quotas[person_id]["day"]["seconds"][date_str] = 0
+        quotas[person_id]["day"]["count"][date_str] = 0
+        if month not in quotas[person_id]["day"]["entries"]:
+            quotas[person_id]["day"]["entries"][month] = 0
+        quotas[person_id]["day"]["entries"][month] += 1
+    if week not in quotas[person_id]["week"]["frames"]:
+        quotas[person_id]["week"]["frames"][week] = 0
+        quotas[person_id]["week"]["seconds"][week] = 0
+        quotas[person_id]["week"]["count"][week] = 0
+        if year not in quotas[person_id]["week"]["entries"]:
+            quotas[person_id]["week"]["entries"][year] = 0
+        quotas[person_id]["week"]["entries"][year] += 1
+    if month not in quotas[person_id]["month"]["frames"]:
+        quotas[person_id]["month"]["frames"][month] = 0
+        quotas[person_id]["month"]["seconds"][month] = 0
+        quotas[person_id]["month"]["count"][month] = 0
+        if year not in quotas[person_id]["month"]["entries"]:
+            quotas[person_id]["month"]["entries"][year] = 0
+        quotas[person_id]["month"]["entries"][year] += 1
+    if year not in quotas[person_id]["year"]["frames"]:
+        quotas[person_id]["year"]["frames"][year] = 0
+        quotas[person_id]["year"]["seconds"][year] = 0
+        quotas[person_id]["year"]["count"][year] = 0
+
+
+def _init_quota_person(quotas, person_id):
+    quotas[person_id] = {}
+    quotas[person_id] = {
+        "day": {"frames": {}, "seconds": {}, "count": {}, "entries": {}},
+        "week": {"frames": {}, "seconds": {}, "count": {}, "entries": {}},
+        "month": {"frames": {}, "seconds": {}, "count": {}, "entries": {}},
+        "year": {"frames": {}, "seconds": {}, "count": {}},
+    }
+
+
+def get_month_quota_shots(
+    person_id, year, month, project_id=None, task_type_id=None, weighted=True
+):
+    """
+    Return shots that are included in quota comptutation for given
+    person and month.
+    """
+    start, end = date_helpers.get_month_interval(year, month)
+    start, end = _get_timezoned_interval(start, end)
+    if weighted:
+        return get_weighted_quota_shots_between(
+            person_id,
+            start,
+            end,
+            project_id=project_id,
+            task_type_id=task_type_id,
+        )
+    else:
+        return get_raw_quota_shots_between(
+            person_id,
+            start,
+            end,
+            project_id=project_id,
+            task_type_id=task_type_id,
+        )
+
+
+def get_week_quota_shots(
+    person_id, year, week, project_id=None, task_type_id=None, weighted=True
+):
+    """
+    Return shots that are included in quota comptutation for given
+    person and week.
+    """
+    start, end = date_helpers.get_week_interval(year, week)
+    start, end = _get_timezoned_interval(start, end)
+    if weighted:
+        return get_weighted_quota_shots_between(
+            person_id,
+            start,
+            end,
+            project_id=project_id,
+            task_type_id=task_type_id,
+        )
+    else:
+        return get_raw_quota_shots_between(
+            person_id,
+            start,
+            end,
+            project_id=project_id,
+            task_type_id=task_type_id,
+        )
+
+
+def get_day_quota_shots(
+    person_id,
+    year,
+    month,
+    day,
+    project_id=None,
+    task_type_id=None,
+    weighted=True,
+):
+    """
+    Return shots that are included in quota comptutation for given
+    person and day.
+    """
+    start, end = date_helpers.get_day_interval(year, month, day)
+    start, end = _get_timezoned_interval(start, end)
+    if weighted:
+        return get_weighted_quota_shots_between(
+            person_id,
+            start,
+            end,
+            project_id=project_id,
+            task_type_id=task_type_id,
+        )
+    else:
+        return get_raw_quota_shots_between(
+            person_id,
+            start,
+            end,
+            project_id=project_id,
+            task_type_id=task_type_id,
+        )
+
+
+def get_weighted_quota_shots_between(
+    person_id, start, end, project_id=None, task_type_id=None
+):
+    """
+    Get all shots leading to a quota computation during the given period.
+    Set a weight on each one:
+        * If there is time spent filled, weight it by the sum of duration
+          divided py the overall task duration.
+        * If there is no time spent, weight it by the number of business days
+          in the time interval spent between WIP date (start) and
+          feedback date (end).
+    """
+    shot_type = get_shot_type()
+    person = persons_service.get_person_raw(person_id)
+    shots = []
+    already_listed = {}
+
+    query = (
+        Entity.query.filter(Entity.entity_type_id == shot_type["id"])
+        .filter(Task.project_id == project_id)
+        .filter(Task.task_type_id == task_type_id)
+        .filter(Task.end_date != None)
+        .filter(TimeSpent.person_id == person_id)
+        .filter(TimeSpent.date >= start)
+        .filter(TimeSpent.date < end)
+        .join(Task, Entity.id == Task.entity_id)
+        .join(Project, Project.id == Task.project_id)
+        .join(TimeSpent, Task.id == TimeSpent.task_id)
+        .add_columns(Task.duration, TimeSpent.duration)
+    )
+    query_shots = query.all()
+    for (entity, task_duration, duration) in query_shots:
+        shot = entity.serialize()
+        if shot["id"] not in already_listed:
+            full_name, _ = names_service.get_full_entity_name(shot["id"])
+            shot["full_name"] = full_name
+            shot["weight"] = round(duration / task_duration, 2) or 0
+            shots.append(shot)
+            already_listed[shot["id"]] = shot
+        else:
+            shot = already_listed[shot["id"]]
+            shot["weight"] += round(duration / task_duration, 2)
+
+    start = date_helpers.get_datetime_from_string(start)
+    end = date_helpers.get_datetime_from_string(end)
+    query = (
+        Entity.query.filter(Entity.entity_type_id == shot_type["id"])
+        .filter(Task.project_id == project_id)
+        .filter(Task.task_type_id == task_type_id)
+        .filter(Task.end_date != None)
+        .filter(Task.real_start_date != None)
+        .filter(Task.assignees.contains(person))
+        .filter((Task.real_start_date <= end) & (Task.end_date >= start))
+        .filter(TimeSpent.id == None)
+        .join(Task, Entity.id == Task.entity_id)
+        .join(Project, Project.id == Task.project_id)
+        .outerjoin(TimeSpent, TimeSpent.task_id == Task.id)
+        .add_columns(Task.real_start_date, Task.end_date)
+    )
+    query_shots = query.all()
+
+    for (entity, task_start, task_end) in query_shots:
+        shot = entity.serialize()
+        if shot["id"] not in already_listed:
+            business_days = (
+                date_helpers.get_business_days(task_start, task_end) + 1
+            )
+            full_name, _ = names_service.get_full_entity_name(shot["id"])
+            shot["full_name"] = full_name
+            multiplicator = 1
+            if task_start >= start and task_end <= end:
+                multiplicator = business_days
+            elif task_start >= start:
+                multiplicator = (
+                    date_helpers.get_business_days(task_start, end) + 1
+                )
+            elif task_end <= end:
+                multiplicator = (
+                    date_helpers.get_business_days(start, task_end) + 1
+                )
+            shot["weight"] = round(multiplicator / business_days, 2)
+            already_listed[shot["id"]] = True
+            shots.append(shot)
+
+    return sorted(shots, key=itemgetter("full_name"))
+
+
+def get_raw_quota_shots_between(
+    person_id, start, end, project_id=None, task_type_id=None
+):
+    """
+    Get all shots leading to a quota computation during the given period.
+    """
+    shot_type = get_shot_type()
+    person = persons_service.get_person_raw(person_id)
+    shots = []
+
+    query = (
+        Entity.query.filter(Entity.entity_type_id == shot_type["id"])
+        .filter(Task.project_id == project_id)
+        .filter(Task.task_type_id == task_type_id)
+        .filter(Task.end_date.between(start, end))
+        .filter(Task.assignees.contains(person))
+        .join(Task, Entity.id == Task.entity_id)
+        .join(Project, Project.id == Task.project_id)
+    )
+    query_shots = query.all()
+
+    for entity in query_shots:
+        shot = entity.serialize()
+        full_name, _ = names_service.get_full_entity_name(shot["id"])
+        shot["full_name"] = full_name
+        shot["weight"] = 1
+        shots.append(shot)
+
+    return sorted(shots, key=itemgetter("full_name"))
+
+
+def _get_timezoned_interval(start, end):
+    """
+    Get time intervals adapted to the user timezone.
+    """
+    timezone = user_service.get_timezone()
+    return date_helpers.get_timezoned_interval(start, end, timezone)

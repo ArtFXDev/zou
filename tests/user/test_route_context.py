@@ -232,7 +232,11 @@ class UserContextRoutesTestCase(ApiDBTestCase):
 
         tasks_service.update_task(
             shot_task_id,
-            {"task_status_id": tasks_service.get_done_status()["id"]},
+            {
+                "task_status_id": tasks_service.get_or_create_status(
+                    "Done", "done", "#22d160", is_done=True
+                )["id"]
+            },
         )
 
         path = "data/user/tasks/"
@@ -252,7 +256,9 @@ class UserContextRoutesTestCase(ApiDBTestCase):
         tasks = self.get(path)
         self.assertEqual(len(tasks), 0)
 
-        done_status = tasks_service.get_done_status()
+        done_status = tasks_service.get_or_create_status(
+            "Done", "done", "#22d160", is_done=True
+        )
         tasks_service.update_task(
             task_id, {"task_status_id": done_status["id"]}
         )
@@ -442,7 +448,7 @@ class UserContextRoutesTestCase(ApiDBTestCase):
         self.assertEqual(len(context["projects"]), 1)
         self.assertEqual(len(context["asset_types"]), 1)
         self.assertEqual(len(context["departments"]), 2)
-        self.assertEqual(len(context["task_types"]), 3)
+        self.assertEqual(len(context["task_types"]), 6)
         self.assertEqual(len(context["task_status"]), 3)
         self.assertEqual(len(context["project_status"]), 2)
         self.assertEqual(len(context["persons"]), 3)

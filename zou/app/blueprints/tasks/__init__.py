@@ -12,7 +12,6 @@ from .resources import (
     PersonRelatedTasksResource,
     PersonTasksResource,
     PersonDoneTasksResource,
-    TaskStartResource,
     ToReviewResource,
     TaskCommentsResource,
     TaskCommentResource,
@@ -25,9 +24,8 @@ from .resources import (
     ProjectSubscriptionsResource,
     ProjectTasksResource,
     CreateShotTasksResource,
-    CreateShotTaskResource,
     CreateAssetTasksResource,
-    CreateAssetTaskResource,
+    CreateEditTasksResource,
     GetTimeSpentResource,
     SetTimeSpentResource,
     AddTimeSpentResource,
@@ -71,7 +69,6 @@ routes = [
     ("/actions/tasks/<task_id>/assign", TaskAssignResource),
     ("/actions/tasks/clear-assignation", ClearAssignationResource),
     ("/actions/persons/<person_id>/assign", TasksAssignResource),
-    ("/actions/tasks/<task_id>/start", TaskStartResource),
     ("/actions/tasks/<task_id>/time-spents/<date>", GetTimeSpentResource),
     (
         "/actions/tasks/<task_id>/time-spents/<date>/persons/<person_id>",
@@ -96,16 +93,12 @@ routes = [
         CreateShotTasksResource,
     ),
     (
-        "/actions/projects/<project_id>/task-types/<task_type_id>/shots/create-task",
-        CreateShotTaskResource,
-    ),
-    (
         "/actions/projects/<project_id>/task-types/<task_type_id>/assets/create-tasks",
         CreateAssetTasksResource,
     ),
     (
-        "/actions/projects/<project_id>/task-types/<task_type_id>/assets/create-task",
-        CreateAssetTaskResource,
+        "/actions/projects/<project_id>/task-types/<task_type_id>/edits/create-tasks",
+        CreateEditTasksResource,
     ),
 ]
 

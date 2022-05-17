@@ -35,7 +35,7 @@ class PreviewFile(db.Model, BaseMixin, SerializerMixin):
     description = db.Column(db.Text())
     path = db.Column(db.String(400))
     source = db.Column(db.String(40))
-    file_size = db.Column(db.Integer(), default=0)
+    file_size = db.Column(db.BigInteger(), default=0)
     status = db.Column(ChoiceType(STATUSES), default="processing")
     validation_status = db.Column(
         ChoiceType(VALIDATION_STATUSES), default="neutral"
@@ -77,3 +77,18 @@ class PreviewFile(db.Model, BaseMixin, SerializerMixin):
         else:
             previous_data.update(data)
             return (previous_data, True)
+
+    def present(self):
+        return {
+            "id": str(self.id),
+            "name": self.name,
+            "original_name": self.original_name,
+            "extension": self.extension,
+            "revision": self.revision,
+            "position": self.position,
+            "file_size": self.file_size,
+            "status": str(self.status),
+            "validation_status": str(self.validation_status),
+            "task_id": str(self.task_id),
+            "person_id": str(self.person_id),
+        }

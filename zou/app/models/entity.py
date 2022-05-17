@@ -34,6 +34,7 @@ class EntityLink(db.Model, BaseMixin, SerializerMixin):
         primary_key=True,
         index=True,
     )
+    data = db.Column(JSONB)
     nb_occurences = db.Column(db.Integer, default=1)
     label = db.Column(db.String(80), default="")
 
@@ -79,11 +80,7 @@ class Entity(db.Model, BaseMixin, SerializerMixin):
     canceled = db.Column(db.Boolean, default=False)
 
     nb_frames = db.Column(db.Integer)  # Specific to shots
-    render_time = db.Column(db.Integer)
     nb_entities_out = db.Column(db.Integer, default=0)
-    validation_history = db.relationship(
-        "ValidationRecord", back_populates="shot"
-    )
 
     project_id = db.Column(
         UUIDType(binary=False),
@@ -225,7 +222,7 @@ class Entity(db.Model, BaseMixin, SerializerMixin):
             if field in data:
                 del data[field]
 
-        if model_type in ["Shot", "Sequence", "Episode"]:
+        if model_type in ["Shot", "Sequence", "Episode", "Edit"]:
             entity_type = EntityType.get_by(name=model_type)
             data["entity_type_id"] = entity_type.id
 

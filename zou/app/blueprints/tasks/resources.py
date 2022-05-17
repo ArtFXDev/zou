@@ -13,6 +13,7 @@ from zou.app.services.exception import (
 from zou.app.services import (
     assets_service,
     deletion_service,
+    edits_service,
     entities_service,
     files_service,
     file_tree_service,
@@ -108,6 +109,19 @@ class TaskCommentResource(Resource):
     """
     Remove given comment and update linked task accordingly.
     """
+
+    @jwt_required
+    def get(self, task_id, comment_id):
+        """
+        Get comment corresponding at given ID.
+        """
+        comment = tasks_service.get_comment(comment_id)
+        task = tasks_service.get_task(comment["object_id"])
+        if permissions.has_manager_permissions():
+            user_service.check_project_access(task["project_id"])
+        else:
+            user_service.check_person_access(comment["person_id"])
+        return comment
 
     def pre_delete(self, comment):
         task = tasks_service.get_task(comment["object_id"])
@@ -229,30 +243,6 @@ class CreateShotTasksResource(Resource):
         return tasks, 201
 
 
-class CreateShotTaskResource(Resource):
-    """
-    Create a new task for given shot and task type.
-    """
-
-    @jwt_required
-    def post(self, project_id, task_type_id):
-        user_service.check_manager_project_access(project_id)
-        task_type = tasks_service.get_task_type(task_type_id)
-
-        shot_id = request.json["shot"]
-        task_name = request.json.get("name", "main")
-
-        shot = shots_service.get_shot(shot_id)
-        if shot["project_id"] != project_id:
-            return {
-                "error": True,
-                "message": "The given shot does not belong to your project.",
-            }, 400
-
-        tasks = tasks_service.create_task(task_type, shot, task_name)
-        return tasks, 201
-
-
 class CreateAssetTasksResource(Resource):
     """
     Create a new task for given asset and task type.
@@ -279,9 +269,9 @@ class CreateAssetTasksResource(Resource):
         return tasks, 201
 
 
-class CreateAssetTaskResource(Resource):
+class CreateEditTasksResource(Resource):
     """
-    Create a new task for given shot and task type.
+    Create a new task for given edit and task type.
     """
 
     @jwt_required
@@ -289,17 +279,19 @@ class CreateAssetTaskResource(Resource):
         user_service.check_manager_project_access(project_id)
         task_type = tasks_service.get_task_type(task_type_id)
 
-        asset_id = request.json["shot"]
-        task_name = request.json.get("name", "main")
+        edit_ids = request.json
+        edits = []
+        if type(edit_ids) == list and len(edit_ids) > 0:
+            for edit_id in edit_ids:
+                edit = edits_service.get_edit(edit_id)
+                if edit["project_id"] == project_id:
+                    edits.append(edit)
+        else:
+            criterions = query.get_query_criterions_from_request(request)
+            criterions["project_id"] = project_id
+            edits = edits_service.get_edits(criterions)
 
-        asset = assets_service.get_asset(asset_id)
-        if asset["project_id"] != project_id:
-            return {
-                "error": True,
-                "message": "The given shot does not belong to your project.",
-            }, 400
-
-        tasks = tasks_service.create_task(task_type, asset, task_name)
+        tasks = tasks_service.create_tasks(task_type, edits)
         return tasks, 201
 
 
@@ -377,7 +369,7 @@ class ClearAssignationResource(Resource):
 
     @jwt_required
     def put(self):
-        (task_ids) = self.get_arguments()
+        (task_ids, person_id) = self.get_arguments()
 
         if len(task_ids) > 0:
             task = tasks_service.get_task(task_ids[0])
@@ -385,7 +377,7 @@ class ClearAssignationResource(Resource):
 
         for task_id in task_ids:
             try:
-                tasks_service.clear_assignation(task_id)
+                tasks_service.clear_assignation(task_id, person_id=person_id)
             except TaskNotFoundException:
                 pass
         return task_ids
@@ -398,8 +390,9 @@ class ClearAssignationResource(Resource):
             required=True,
             action="append",
         )
+        parser.add_argument("person_id", default=None)
         args = parser.parse_args()
-        return args["task_ids"]
+        return args["task_ids"], args["person_id"]
 
 
 class TasksAssignResource(Resource):
@@ -415,9 +408,7 @@ class TasksAssignResource(Resource):
         tasks = []
         for task_id in task_ids:
             try:
-                user_service.check_project_departement_access(
-                    task_id, person_id
-                )
+                user_service.check_task_departement_access(task_id, person_id)
                 task = self.assign_task(task_id, person_id)
                 author = persons_service.get_current_user()
                 notifications_service.create_assignation_notification(
@@ -498,18 +489,6 @@ class TaskFullResource(Resource):
         user_service.check_project_access(task["project_id"])
         user_service.check_entity_access(task["entity_id"])
         return task
-
-
-class TaskStartResource(Resource):
-    """
-    Set the status of a given task to Work In Progress.
-    """
-
-    @jwt_required
-    def put(self, task_id):
-        task = tasks_service.get_task(task_id)
-        user_service.check_project_access(task["project_id"])
-        return tasks_service.start_task(task["id"])
 
 
 class TaskForEntityResource(Resource):

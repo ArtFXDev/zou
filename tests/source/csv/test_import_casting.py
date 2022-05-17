@@ -2,12 +2,15 @@ from tests.base import ApiDBTestCase
 
 from zou.app.models.entity import EntityLink
 
+from zou.app.services.shots_service import get_shot
+
 
 class ImportCsvCastingTestCase(ApiDBTestCase):
     def setUp(self):
         super(ImportCsvCastingTestCase, self).setUp()
         self.generate_fixture_project_status()
         self.generate_fixture_project()
+        self.project.update({"production_type": "tvshow"})
         self.generate_fixture_asset_type()
         self.generate_fixture_asset_types()
         for (name, asset_type_id) in [
@@ -26,6 +29,8 @@ class ImportCsvCastingTestCase(ApiDBTestCase):
                 self.asset_lake_id = self.asset.id
             if name == "Mine":
                 self.asset_mine_id = self.asset.id
+            if name == "Victor":
+                self.asset_victor_id = self.asset.id
 
         self.generate_fixture_episode("E01")
         self.generate_fixture_sequence("SEQ01")
@@ -66,7 +71,7 @@ class ImportCsvCastingTestCase(ApiDBTestCase):
         self.assertTrue("Wagon" in [assets[0]["name"], assets[1]["name"]])
 
         links = EntityLink.query.all()
-        self.assertEqual(len(links), 12)
+        self.assertEqual(len(links), 18)
 
     def test_import_casting_twice(self):
         path = "/import/csv/projects/%s/casting" % self.project_id
@@ -74,10 +79,16 @@ class ImportCsvCastingTestCase(ApiDBTestCase):
         path = "/import/csv/projects/%s/casting" % self.project_id
         self.upload_csv(path, "casting")
         links = EntityLink.query.all()
-        self.assertEqual(len(links), 12)
+        self.assertEqual(len(links), 18)
+        self.assertEqual(get_shot(self.e01seq01sh01_id)["nb_entities_out"], 2)
 
         path = "/import/csv/projects/%s/casting" % self.project_id
         self.upload_csv(path, "casting_02")
         links = EntityLink.query.all()
-        self.assertEqual(len(links), 12)
-        self.assertEqual(links[0].label, "fixed")
+        self.assertEqual(len(links), 18)
+        link = EntityLink.get_by(
+            entity_in_id=self.e01seq01sh01_id,
+            entity_out_id=self.asset_victor_id
+        )
+        self.assertEqual(link.label, "fixed")
+        self.assertEqual(get_shot(self.e01seq01sh01_id)["nb_entities_out"], 2)

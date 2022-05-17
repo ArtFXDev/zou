@@ -9,6 +9,7 @@ from babel import Locale
 from zou.app import db
 from zou.app.models.serializer import SerializerMixin
 from zou.app.models.base import BaseMixin
+from zou.app import config
 
 
 department_link = db.Table(
@@ -16,14 +17,6 @@ department_link = db.Table(
     db.Column("person_id", UUIDType(binary=False), db.ForeignKey("person.id")),
     db.Column(
         "department_id", UUIDType(binary=False), db.ForeignKey("department.id")
-    ),
-)
-
-game_variant_link = db.Table(
-    "variant_link",
-    db.Column("person_id", UUIDType(binary=False), db.ForeignKey("person.id")),
-    db.Column(
-        "variant_id", UUIDType(binary=False), db.ForeignKey("game_variant.id")
     ),
 )
 
@@ -37,11 +30,6 @@ class Person(db.Model, BaseMixin, SerializerMixin):
     last_name = db.Column(db.String(80), nullable=False)
     email = db.Column(EmailType, unique=True)
     phone = db.Column(db.String(30))
-    coins = db.Column(db.Integer, default=0, nullable=False)
-    scores = db.relationship("GameScore", back_populates="player")
-    game_variants = db.relationship(
-        "GameVariant", secondary=game_variant_link, back_populates="owners"
-    )
 
     active = db.Column(db.Boolean(), default=True)
     last_presence = db.Column(db.Date())
@@ -50,19 +38,21 @@ class Person(db.Model, BaseMixin, SerializerMixin):
     desktop_login = db.Column(db.String(80))
     shotgun_id = db.Column(db.Integer, unique=True)
     timezone = db.Column(
-        TimezoneType(backend="pytz"), default=pytz_timezone("Europe/Paris")
+        TimezoneType(backend="pytz"),
+        default=pytz_timezone(config.DEFAULT_TIMEZONE),
     )
     locale = db.Column(LocaleType, default=Locale("en", "US"))
     data = db.Column(JSONB)
     role = db.Column(db.String(30), default="user")
     has_avatar = db.Column(db.Boolean(), default=False)
-    projects = db.relationship(
-        "Project", secondary="project_person_link", back_populates="team"
-    )
 
     notifications_enabled = db.Column(db.Boolean(), default=False)
     notifications_slack_enabled = db.Column(db.Boolean(), default=False)
     notifications_slack_userid = db.Column(db.String(60), default="")
+    notifications_mattermost_enabled = db.Column(db.Boolean(), default=False)
+    notifications_mattermost_userid = db.Column(db.String(60), default="")
+    notifications_discord_enabled = db.Column(db.Boolean(), default=False)
+    notifications_discord_userid = db.Column(db.String(60), default="")
 
     departments = db.relationship("Department", secondary=department_link)
 
@@ -95,6 +85,7 @@ class Person(db.Model, BaseMixin, SerializerMixin):
             "full_name": self.full_name(),
             "has_avatar": data["has_avatar"],
             "active": data["active"],
+            "departments": data["departments"],
         }
 
     def set_departments(self, department_ids):

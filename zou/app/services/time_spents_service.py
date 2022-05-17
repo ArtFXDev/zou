@@ -20,6 +20,18 @@ from zou.app.services import user_service
 from zou.app.services.exception import WrongDateFormatException
 
 
+def get_time_spents_for_entity(entity_id):
+    """
+    Return all time spents related to given entity.
+    """
+    query = (
+        TimeSpent.query.join(Task)
+        .filter(Task.entity_id == entity_id)
+        .order_by(TimeSpent.date.desc())
+    )
+    return TimeSpent.serialize_list(query.all())
+
+
 def get_year_table(person_id=None, project_id=None):
     """
     Return a table giving time spent by user and by month for given year.
@@ -147,6 +159,22 @@ def get_time_spents(person_id, date):
     except DataError:
         raise WrongDateFormatException
     return fields.serialize_list(time_spents)
+
+
+def get_time_spent(person_id, task_id, date):
+    """
+    Return time spent for given person, task and date.
+    """
+    try:
+        time_spent = TimeSpent.query.filter_by(
+            person_id=person_id, task_id=task_id, date=date
+        ).first()
+    except DataError:
+        raise WrongDateFormatException
+    if time_spent is not None:
+        return time_spent.serialize()
+    else:
+        return None
 
 
 def get_day_off(person_id, date):
@@ -354,10 +382,7 @@ def get_day_offs_between(start, end, person_id=None):
 
 def get_timezoned_interval(start, end):
     """
-    Get all day off entries for given person, year.
+    Get time intervals adapted to the user timezone.
     """
     timezone = user_service.get_timezone()
-    return (
-        date_helpers.get_string_with_timezone_from_date(start, timezone),
-        date_helpers.get_string_with_timezone_from_date(end, timezone),
-    )
+    return date_helpers.get_timezoned_interval(start, end, timezone)

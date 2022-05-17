@@ -1,6 +1,4 @@
-import math
-
-from flask_restful import Resource, reqparse
+from flask_restful import Resource
 from flask_jwt_extended import jwt_required
 
 from flask import request
@@ -11,7 +9,6 @@ from zou.app.services import (
     schedule_service,
     tasks_service,
     user_service,
-    validation_service,
 )
 from zou.app.utils import permissions
 from zou.app.services.exception import WrongParameterException
@@ -23,9 +20,17 @@ class OpenProjectsResource(Resource):
     projects are not needed.
     """
 
+    @jwt_required
     def get(self):
         name = request.args.get("name", None)
-        return projects_service.open_projects(name=name)
+        try:
+            permissions.check_admin_permissions()
+            for_client = permissions.has_client_permissions()
+            return projects_service.open_projects(
+                name=name, for_client=for_client
+            )
+        except permissions.PermissionDenied:
+            return user_service.get_open_projects(name=name)
 
 
 class AllProjectsResource(Resource):
@@ -163,6 +168,11 @@ class ProductionTaskStatusResource(Resource, ArgsMixin):
     """
 
     @jwt_required
+    def get(self, project_id):
+        user_service.check_manager_project_access(project_id)
+        return projects_service.get_project_task_statuses(project_id)
+
+    @jwt_required
     def post(self, project_id):
         args = self.get_args([("task_status_id", "", True)])
         project = projects_service.add_task_status_setting(
@@ -180,6 +190,40 @@ class ProductionTaskStatusRemoveResource(Resource):
     def delete(self, project_id, task_status_id):
         user_service.check_manager_project_access(project_id)
         projects_service.remove_task_status_setting(project_id, task_status_id)
+        return "", 204
+
+
+class ProductionStatusAutomationResource(Resource, ArgsMixin):
+    """
+    Allow to add a status automation linked to a production.
+    """
+
+    @jwt_required
+    def get(self, project_id):
+        user_service.check_manager_project_access(project_id)
+        return projects_service.get_project_status_automations(project_id)
+
+    @jwt_required
+    def post(self, project_id):
+        args = self.get_args([("status_automation_id", "", True)])
+        user_service.check_manager_project_access(project_id)
+        project = projects_service.add_status_automation_setting(
+            project_id, args["status_automation_id"]
+        )
+        return project, 201
+
+
+class ProductionStatusAutomationRemoveResource(Resource):
+    """
+    Allow to remove an status automation linked to a production.
+    """
+
+    @jwt_required
+    def delete(self, project_id, status_automation_id):
+        user_service.check_manager_project_access(project_id)
+        projects_service.remove_status_automation_setting(
+            project_id, status_automation_id
+        )
         return "", 204
 
 
@@ -205,15 +249,19 @@ class ProductionMetadataDescriptorsResource(Resource, ArgsMixin):
                 ("name", "", True),
                 ("for_client", "False", False),
                 ("choices", [], False, "append"),
+                ("departments", [], False, "append"),
             ]
         )
-        permissions.check_admin_permissions()
+
+        user_service.check_all_departments_access(
+            project_id, args["departments"]
+        )
 
         args["for_client"] = args["for_client"] == "True"
 
-        if args["entity_type"] not in ["Asset", "Shot"]:
+        if args["entity_type"] not in ["Asset", "Shot", "Edit"]:
             raise WrongParameterException(
-                "Wrong entity type. Please select Asset or Shot."
+                "Wrong entity type. Please select Asset, Shot or Edit."
             )
 
         if len(args["name"]) == 0:
@@ -226,6 +274,7 @@ class ProductionMetadataDescriptorsResource(Resource, ArgsMixin):
                 args["name"],
                 args["choices"],
                 args["for_client"],
+                args["departments"],
             ),
             201,
         )
@@ -249,9 +298,16 @@ class ProductionMetadataDescriptorResource(Resource, ArgsMixin):
                 ("name", "", False),
                 ("for_client", "False", False),
                 ("choices", [], False, "append"),
+                ("departments", [], False, "append"),
             ]
         )
-        permissions.check_admin_permissions()
+        user_service.check_all_departments_access(
+            project_id,
+            projects_service.get_metadata_descriptor(descriptor_id)[
+                "departments"
+            ]
+            + args["departments"],
+        )
 
         if len(args["name"]) == 0:
             raise WrongParameterException("Name cannot be empty.")
@@ -262,7 +318,12 @@ class ProductionMetadataDescriptorResource(Resource, ArgsMixin):
 
     @jwt_required
     def delete(self, project_id, descriptor_id):
-        permissions.check_admin_permissions()
+        user_service.check_all_departments_access(
+            project_id,
+            projects_service.get_metadata_descriptor(descriptor_id)[
+                "departments"
+            ],
+        )
         projects_service.remove_metadata_descriptor(descriptor_id)
         return "", 204
 
@@ -353,57 +414,3 @@ class ProductionSequencesScheduleItemsResource(Resource):
         return schedule_service.get_sequences_schedule_items(
             project_id, task_type_id
         )
-
-
-class ProductionProgressResource(Resource):
-    """
-    Resource to retrieve progress along time of the project
-    """
-
-    @jwt_required
-    def get(self, project_id):
-        user_service.check_project_access(project_id)
-        user_service.block_access_to_vendor()
-        trunc_key = self.get_arguments()
-        project_progress = validation_service.get_project_progress(
-            project_id, trunc_key
-        )
-        return [
-            {
-                **progress,
-                "date": math.floor(progress["date"].timestamp() * 1000),
-            }
-            for progress in project_progress
-        ]
-
-    def get_arguments(self):
-        parser = reqparse.RequestParser()
-        parser.add_argument("trunc_key", required=False)
-        args = parser.parse_args()
-        return args.get("trunc_key", "day")
-
-
-class ProductionsProgressResource(Resource):
-    """
-    Resource to retrieve progress along time of all the projects
-    """
-
-    def get(self):
-        trunc_key, average_key = self.get_arguments()
-        projects_progress = validation_service.get_projects_progress(
-            trunc_key, average_key=average_key
-        )
-        return [
-            {
-                **progress,
-                "date": math.floor(progress["date"].timestamp() * 1000),
-            }
-            for progress in projects_progress
-        ]
-
-    def get_arguments(self):
-        parser = reqparse.RequestParser()
-        parser.add_argument("trunc_key", required=False)
-        parser.add_argument("average_key", required=False)
-        args = parser.parse_args()
-        return args.get("trunc_key", "day"), args.get("average_key", "AVERAGE")

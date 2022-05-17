@@ -24,6 +24,14 @@ def clear_entity_type_cache(entity_type_id):
     cache.cache.delete_memoized(get_entity_type_by_name)
 
 
+def get_temporal_entity_type_by_name(name):
+    entity_type = get_entity_type_by_name(name)
+    if entity_type is None:
+        cache.cache.delete_memoized(get_entity_type_by_name, name)
+        entity_type = get_entity_type_by_name(name)
+    return entity_type
+
+
 @cache.memoize_function(240)
 def get_entity_type(entity_type_id):
     """
@@ -213,13 +221,3 @@ def remove_entity_link(link_id):
         return link.serialize()
     except:
         raise EntityLinkNotFoundException
-
-
-def get_entity_render_time(entity):
-    if isinstance(entity, Entity):
-        entity = entity.serialize()
-
-    while not entity.get("render_time") and entity.get("parent_id"):
-        entity = get_entity_raw(entity["parent_id"]).serialize()
-
-    return entity.get("render_time") or 0

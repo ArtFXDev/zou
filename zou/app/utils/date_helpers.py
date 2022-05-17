@@ -3,6 +3,7 @@ import isoweek
 from babel.dates import format_datetime
 from datetime import date, datetime, timedelta
 from dateutil import relativedelta
+from zou.app.services.exception import WrongDateFormatException
 
 
 def get_now():
@@ -51,6 +52,13 @@ def get_date_from_string(date_str):
     Parse a date string and returns a date object.
     """
     return datetime.strptime(date_str, "%Y-%m-%d")
+
+
+def get_datetime_from_string(date_str):
+    """
+    Parse a datetime string and returns a datetime object.
+    """
+    return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S")
 
 
 def get_year_interval(year):
@@ -112,3 +120,31 @@ def get_day_interval(year, month, day):
     start = datetime(year, month, day)
     end = start + relativedelta.relativedelta(days=1)
     return start, end
+
+
+def get_timezoned_interval(start, end, timezone):
+    """
+    Get interval between two dates based on timezones.
+    """
+    return (
+        get_string_with_timezone_from_date(start, timezone),
+        get_string_with_timezone_from_date(end, timezone),
+    )
+
+
+def get_business_days(start, end):
+    """
+    Returns the number of business days between two dates.
+    """
+    daygenerator = (
+        start + timedelta(x + 1) for x in range((end - start).days)
+    )
+    return sum(1 for day in daygenerator if day.weekday() < 5)
+
+
+def add_business_days_to_date(date, nb_days):
+    while nb_days > 0:
+        date += timedelta(days=1)
+        if date.weekday() < 5:
+            nb_days -= 1
+    return date

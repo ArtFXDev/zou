@@ -33,9 +33,13 @@ from zou.app.services.exception import (
 
 
 def remove_comment(comment_id):
+    """
+    Remove a comment from database and everything related (notifs, news, and
+    preview files)
+    """
     comment = Comment.get(comment_id)
-    task = Task.get(comment.object_id)
     if comment is not None:
+        task = Task.get(comment.object_id)
         notifications = Notification.query.filter_by(comment_id=comment.id)
         for notification in notifications:
             notification.delete()
@@ -117,10 +121,17 @@ def remove_task(task_id, force=False):
 
     task.delete()
     tasks_service.clear_task_cache(task_id)
+    task_serialized = task.serialize()
     events.emit(
-        "task:delete", {"task_id": task_id}, project_id=str(task.project_id)
+        "task:delete",
+        {
+            "task_id": task_id,
+            "entity_id": task_serialized["entity_id"],
+            "task_type_id": task_serialized["task_type_id"],
+        },
+        project_id=task_serialized["project_id"],
     )
-    return task.serialize()
+    return task_serialized
 
 
 def remove_preview_file_by_id(preview_file_id):
@@ -265,6 +276,7 @@ def remove_project(project_id):
     News.commit()
     project = Project.get(project_id)
     project.delete()
+    events.emit("project:delete", {"project_id": project.id})
     return project_id
 
 
@@ -367,6 +379,7 @@ def remove_episode(episode_id, force=False):
         ScheduleItem.delete_all_by(object_id=episode_id)
     try:
         episode.delete()
+        events.emit("episode:delete", {"episode_id": episode_id})
     except IntegrityError:
         raise ModelWithRelationsDeletionException(
             "Some data are still linked to this episode."

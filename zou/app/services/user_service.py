@@ -1,9 +1,11 @@
 from sqlalchemy.orm import aliased
 
+from zou.app import config
 from zou.app.models.comment import Comment
 from zou.app.models.entity import Entity
 from zou.app.models.entity_type import EntityType
 from zou.app.models.notification import Notification
+from zou.app.models.person import Person
 from zou.app.models.project import Project
 from zou.app.models.project_status import ProjectStatus
 from zou.app.models.search_filter import SearchFilter
@@ -13,11 +15,14 @@ from zou.app.models.task_type import TaskType
 from zou.app.services import (
     assets_service,
     custom_actions_service,
+    edits_service,
+    entities_service,
     notifications_service,
     names_service,
     persons_service,
     projects_service,
     shots_service,
+    status_automations_service,
     tasks_service,
 )
 from zou.app.services.exception import (
@@ -324,7 +329,7 @@ def check_working_on_task(task_id):
 
 def check_person_access(person_id):
     """
-    Return True if user is admin or is matching given person id.
+    Return True if user is an admin or is matching given person id.
     """
     current_user = persons_service.get_current_user()
     if permissions.has_admin_permissions() or current_user["id"] == person_id:
@@ -351,7 +356,7 @@ def check_belong_to_project(project_id):
 
 def check_project_access(project_id):
     """
-    Return true if current user is manager or has a task assigned for this
+    Return true if current user is a manager or has a task assigned for this
     project.
     """
     is_allowed = (
@@ -374,7 +379,7 @@ def block_access_to_vendor():
 
 def check_entity_access(entity_id):
     """
-    Return true if current user is not vendor or has a task assigned for this
+    Return true if current user is not a vendor or has a task assigned for this
     project.
     """
     is_allowed = not permissions.has_vendor_permissions()
@@ -392,7 +397,7 @@ def check_entity_access(entity_id):
 
 def check_manager_project_access(project_id):
     """
-    Return true if current user is manager or has a task assigned for this
+    Return true if current user is a manager and has a task assigned for this
     project.
     """
     is_allowed = permissions.has_admin_permissions() or (
@@ -404,10 +409,163 @@ def check_manager_project_access(project_id):
     return is_allowed
 
 
-def check_project_departement_access(task_id, person_id):
+def check_supervisor_project_access(project_id):
     """
-    Return true if current user is admin or is manager and is in team
-    or is artist in the task department.
+    Return true if current user is a manager or a supervisor and has a task
+    assigned for this project.
+    """
+    is_allowed = permissions.has_admin_permissions() or (
+        (
+            permissions.has_manager_permissions()
+            or permissions.has_supervisor_permissions()
+        )
+        and check_belong_to_project(project_id)
+    )
+    if not is_allowed:
+        raise permissions.PermissionDenied
+    return is_allowed
+
+
+def check_supervisor_task_access(task, new_data={}):
+    """
+    Return true if current user is a manager and has a task assigned related
+    to the project of this task or is a supervisor and can modify data accorded
+    to his departments
+    """
+    is_allowed = False
+    if permissions.has_admin_permissions() or (
+        permissions.has_manager_permissions()
+        and check_belong_to_project(task["project_id"])
+    ):
+        is_allowed = True
+    elif permissions.has_supervisor_permissions() and check_belong_to_project(
+        task["project_id"]
+    ):
+        # checks that the supervisor only modifies columns
+        # for which he is authorized
+        allowed_columns = set(
+            ["priority", "start_date", "due_date", "estimation"]
+        )
+        if len(set(new_data.keys()) - allowed_columns) == 0:
+            user_departments = persons_service.get_current_user(
+                relations=True
+            )["departments"]
+            if (
+                user_departments == []
+                or tasks_service.get_task_type(task["task_type_id"])[
+                    "department_id"
+                ]
+                in user_departments
+            ):
+                is_allowed = True
+
+    if not is_allowed:
+        raise permissions.PermissionDenied
+    return is_allowed
+
+
+def check_supervisor_schedule_item_access(schedule_item, new_data={}):
+    """
+    Return true if current user is a manager and has a task assigned related
+    to the project of this task or is a supervisor and can modify data accorded
+    to his departments
+    """
+    is_allowed = False
+    if permissions.has_admin_permissions() or (
+        permissions.has_manager_permissions()
+        and check_belong_to_project(schedule_item["project_id"])
+    ):
+        is_allowed = True
+    elif permissions.has_supervisor_permissions() and check_belong_to_project(
+        schedule_item["project_id"]
+    ):
+        user_departments = persons_service.get_current_user(relations=True)[
+            "departments"
+        ]
+        if (
+            user_departments == []
+            or tasks_service.get_task_type(schedule_item["task_type_id"])[
+                "department_id"
+            ]
+            in user_departments
+        ):
+            is_allowed = True
+
+    if not is_allowed:
+        raise permissions.PermissionDenied
+    return is_allowed
+
+
+def check_metadata_department_access(entity, new_data={}):
+    """
+    Return true if current user is a manager and has a task assigned for this
+    project or is a supervisor and is allowed to modify data accorded to
+    his departments
+    """
+    is_allowed = False
+    if permissions.has_admin_permissions() or (
+        permissions.has_manager_permissions()
+        and check_belong_to_project(entity["project_id"])
+    ):
+        is_allowed = True
+    elif permissions.has_supervisor_permissions() and check_belong_to_project(
+        entity["project_id"]
+    ):
+        # checks that the supervisor only modifies columns
+        # for which he is authorized
+        allowed_columns = set(["data"])
+        if len(set(new_data.keys()) - allowed_columns) == 0:
+            user_departments = persons_service.get_current_user(
+                relations=True
+            )["departments"]
+            if user_departments == []:
+                is_allowed = True
+            else:
+                entity_type = None
+                if shots_service.is_shot(entity):
+                    entity_type = "Shot"
+                elif assets_service.is_asset(
+                    entities_service.get_entity_raw(entity["id"])
+                ):
+                    entity_type = "Asset"
+                elif edits_service.is_edit(entity):
+                    entity_type = "Edit"
+                if entity_type:
+                    descriptors = [
+                        descriptor
+                        for descriptor in projects_service.get_metadata_descriptors(
+                            entity["project_id"]
+                        )
+                        if descriptor["entity_type"] == entity_type
+                    ]
+                    found_and_in_departments = False
+                    for descriptor_name in new_data["data"].keys():
+                        found_and_in_departments = False
+                        for descriptor in descriptors:
+                            if descriptor["field_name"] == descriptor_name:
+                                found_and_in_departments = (
+                                    len(
+                                        set(descriptor["departments"])
+                                        & set(user_departments)
+                                    )
+                                    > 0
+                                )
+                                break
+                        if not found_and_in_departments:
+                            break
+                    if found_and_in_departments:
+                        is_allowed = True
+
+    if not is_allowed:
+        raise permissions.PermissionDenied
+    return is_allowed
+
+
+def check_task_departement_access(task_id, person_id):
+    """
+    Return true if current user is an admin or is a manager and is in team
+    or is a supervisor in the department of the task or is an artist assigning
+    himself in the department of the task.
     """
     user = persons_service.get_current_user(relations=True)
     task = tasks_service.get_task(task_id)
@@ -419,11 +577,60 @@ def check_project_departement_access(task_id, person_id):
             and check_belong_to_project(task["project_id"])
         )
         or (
+            permissions.has_supervisor_permissions()
+            and check_belong_to_project(task["project_id"])
+            and (
+                user["departments"] == []
+                or (
+                    task_type["department_id"] in user["departments"]
+                    and len(
+                        set(
+                            persons_service.get_person(person_id)[
+                                "departments"
+                            ]
+                        )
+                        & set(user["departments"])
+                    )
+                    > 0
+                )
+            )
+        )
+        or (
             check_belong_to_project(task["project_id"])
             and task_type["department_id"] in user["departments"]
             and person_id == user["id"]
         )
     )
+    if not is_allowed:
+        raise permissions.PermissionDenied
+    return is_allowed
+
+
+def check_all_departments_access(project_id, departments=[]):
+    """
+    Return true if current user is admin or is manager and is in team or is
+    supervisor and is in team and have access to all departments.
+    """
+    if not isinstance(departments, list):
+        departments = [departments]
+    is_allowed = False
+    if permissions.has_admin_permissions() or (
+        permissions.has_manager_permissions()
+        and check_belong_to_project(project_id)
+    ):
+        is_allowed = True
+    elif permissions.has_supervisor_permissions() and check_belong_to_project(
+        project_id
+    ):
+        user_departments = persons_service.get_current_user(relations=True)[
+            "departments"
+        ]
+        is_allowed = departments and (
+            user_departments == []
+            or all(
+                department in departments for department in user_departments
+            )
+        )
     if not is_allowed:
         raise permissions.PermissionDenied
     return is_allowed
@@ -567,12 +774,16 @@ def get_last_notifications(notification_id=None, after=None, before=None):
     Return last 100 user notifications.
     """
     current_user = persons_service.get_current_user()
+    Author = aliased(Person, name="author")
+    is_current_user_artist = current_user["role"] == "user"
     result = []
     query = (
         Notification.query.filter_by(person_id=current_user["id"])
         .order_by(Notification.created_at.desc())
-        .join(Task, Project)
-        .outerjoin(Comment)
+        .join(Author, Author.id == Notification.author_id)
+        .join(Task, Task.id == Notification.task_id)
+        .join(Project, Project.id == Task.project_id)
+        .outerjoin(Comment, Comment.id == Notification.comment_id)
         .add_columns(
             Project.id,
             Project.name,
@@ -582,6 +793,7 @@ def get_last_notifications(notification_id=None, after=None, before=None):
             Comment.text,
             Comment.replies,
             Task.entity_id,
+            Author.role,
         )
     )
 
@@ -606,6 +818,7 @@ def get_last_notifications(notification_id=None, after=None, before=None):
         comment_text,
         comment_replies,
         task_entity_id,
+        role,
     ) in notifications:
         (full_entity_name, episode_id) = names_service.get_full_entity_name(
             task_entity_id
@@ -630,6 +843,10 @@ def get_last_notifications(notification_id=None, after=None, before=None):
             )
             if reply is not None:
                 reply_text = reply["text"]
+
+        if role == "client" and is_current_user_artist:
+            comment_text = ""
+            reply_text = ""
 
         result.append(
             fields.serialize_dict(
@@ -753,8 +970,8 @@ def get_timezone():
     try:
         timezone = persons_service.get_current_user()["timezone"]
     except Exception:
-        timezone = "Europe/Paris"
-    return timezone or "Europe/Paris"
+        timezone = config.DEFAULT_TIMEZONE
+    return timezone or config.DEFAULT_TIMEZONE
 
 
 def get_context():
@@ -765,6 +982,7 @@ def get_context():
 
     asset_types = assets_service.get_asset_types()
     custom_actions = custom_actions_service.get_custom_actions()
+    status_automations = status_automations_service.get_status_automations()
     persons = persons_service.get_persons(
         minimal=not permissions.has_manager_permissions()
     )
@@ -778,6 +996,7 @@ def get_context():
     return {
         "asset_types": asset_types,
         "custom_actions": custom_actions,
+        "status_automations": status_automations,
         "departments": departments,
         "notification_count": notification_count,
         "persons": persons,

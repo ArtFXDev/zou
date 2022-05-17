@@ -30,7 +30,7 @@ JWT_TOKEN_LOCATION = ["cookies", "headers"]
 JWT_REFRESH_COOKIE_PATH = "/auth/refresh-token"
 JWT_COOKIE_CSRF_PROTECT = False
 JWT_SESSION_COOKIE = False
-# JWT_COOKIE_SAMESITE = "Lax"
+JWT_COOKIE_SAMESITE = "Lax"
 
 DATABASE = {
     "drivername": os.getenv("DB_DRIVER", "postgresql"),
@@ -99,6 +99,7 @@ JOB_QUEUE_NOMAD_PLAYLIST_JOB = os.getenv(
 )
 JOB_QUEUE_NOMAD_NORMALIZE_JOB = os.getenv("JOB_QUEUE_NOMAD_NORMALIZE_JOB", "")
 JOB_QUEUE_NOMAD_HOST = os.getenv("JOB_QUEUE_NOMAD_HOST", "zou-nomad-01.zou")
+JOB_QUEUE_TIMEOUT = os.getenv("JOB_QUEUE_TIMEOUT", 3600)
 
 
 LDAP_HOST = os.getenv("LDAP_HOST", "127.0.0.1")
@@ -121,9 +122,9 @@ CRISP_TOKEN = os.getenv("CRISP_TOKEN", "")
 
 USER_LIMIT = int(os.getenv("USER_LIMIT", "100"))
 
+DEFAULT_TIMEZONE = os.getenv("DEFAULT_TIMEZONE", "Europe/Paris")
+
 # Deprecated
-DONE_TASK_STATUS = "Done"
-WIP_TASK_STATUS = "WIP"
 TO_REVIEW_TASK_STATUS = "To review"
 DEFAULT_FILE_STATUS = "To review"
 DEFAULT_FILE_TREE = os.getenv("DEFAULT_FILE_TREE", "default")

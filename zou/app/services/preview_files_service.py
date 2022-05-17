@@ -11,6 +11,7 @@ from zou.app.models.preview_file import PreviewFile
 from zou.app.models.project import Project
 from zou.app.models.project_status import ProjectStatus
 from zou.app.models.task import Task
+from zou.app.models.task_type import TaskType
 from zou.app.services import names_service, files_service
 from zou.utils import movie
 from zou.app.utils import (
@@ -59,16 +60,17 @@ def get_project_from_preview_file(preview_file_id):
     return project.serialize()
 
 
-def update_preview_file(preview_file_id, data):
+def update_preview_file(preview_file_id, data, silent=False):
     preview_file = files_service.get_preview_file_raw(preview_file_id)
     preview_file.update(data)
     files_service.clear_preview_file_cache(preview_file_id)
-    task = Task.get(preview_file.task_id)
-    events.emit(
-        "preview-file:update",
-        {"preview_file_id": preview_file_id},
-        project_id=str(task.project_id),
-    )
+    if not silent:
+        task = Task.get(preview_file.task_id)
+        events.emit(
+            "preview-file:update",
+            {"preview_file_id": preview_file_id},
+            project_id=str(task.project_id),
+        )
     return preview_file.serialize()
 
 
@@ -96,6 +98,7 @@ def prepare_and_store_movie(
     from zou.app import app as current_app
 
     with current_app.app_context():
+        normalized_movie_low_path = None
         try:
             project = get_project_from_preview_file(preview_file_id)
         except PreviewFileNotFoundException:
@@ -194,6 +197,8 @@ def prepare_and_store_movie(
         os.remove(uploaded_movie_path)
         if normalize:
             os.remove(normalized_movie_path)
+            if normalized_movie_low_path:
+                os.remove(normalized_movie_low_path)
         preview_file = update_preview_file(
             preview_file_id, {"status": "ready", "file_size": file_size}
         )
@@ -418,3 +423,18 @@ def get_running_preview_files():
         )
         results.append(result)
     return results
+
+
+def get_preview_files_for_entity(entity_id):
+    """
+    Return all preview files related to given entity.
+    """
+    query = (
+        PreviewFile.query.join(Task)
+        .join(TaskType)
+        .filter(Task.entity_id == entity_id)
+        .order_by(
+            TaskType.name, PreviewFile.revision.desc(), PreviewFile.position
+        )
+    )
+    return [preview_file.present() for preview_file in query.all()]

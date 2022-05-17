@@ -14,7 +14,6 @@ from zou.app.services import (
     stats_service,
     tasks_service,
     user_service,
-    validation_service,
 )
 
 from zou.app.mixin import ArgsMixin
@@ -179,7 +178,7 @@ class EpisodeShotTasksResource(Resource, ArgsMixin):
     @jwt_required
     def get(self, episode_id):
         """
-        Retrieve all tasks related to a given episode.
+        Retrieve all shots tasks related to a given episode.
         """
         episode = shots_service.get_episode(episode_id)
         user_service.check_project_access(episode["project_id"])
@@ -188,6 +187,23 @@ class EpisodeShotTasksResource(Resource, ArgsMixin):
             raise permissions.PermissionDenied
         relations = self.get_relations()
         return tasks_service.get_shot_tasks_for_episode(
+            episode_id, relations=relations
+        )
+
+
+class EpisodeAssetTasksResource(Resource, ArgsMixin):
+    @jwt_required
+    def get(self, episode_id):
+        """
+        Retrieve all assets tasks related to a given episode.
+        """
+        episode = shots_service.get_episode(episode_id)
+        user_service.check_project_access(episode["project_id"])
+        user_service.check_entity_access(episode["id"])
+        if permissions.has_vendor_permissions():
+            raise permissions.PermissionDenied
+        relations = self.get_relations()
+        return tasks_service.get_asset_tasks_for_episode(
             episode_id, relations=relations
         )
 
@@ -219,58 +235,6 @@ class ShotPreviewsResource(Resource):
         user_service.check_project_access(shot["project_id"])
         user_service.check_entity_access(shot["id"])
         return playlists_service.get_preview_files_for_entity(shot_id)
-
-
-class ShotValidationResource(Resource):
-    @jwt_required
-    def get(self, shot_id):
-        """
-        Retrieve all the validation in order for the given shot
-        """
-        shot = shots_service.get_shot_with_relations(shot_id)
-        user_service.check_project_access(shot["project_id"])
-        user_service.check_entity_access(shot["id"])
-
-        return [
-            validation_service.get_validation_record(validation_id)
-            for validation_id in shot["validation_history"]
-        ]
-
-    @jwt_required
-    def post(self, shot_id):
-        """
-        Create a new validation record from the current validation
-        """
-        shot = shots_service.get_shot(shot_id)
-        user_service.check_project_access(shot["project_id"])
-        user_service.check_entity_access(shot["id"])
-
-        frame_set = self.get_arguments()
-        validation_record = validation_service.create_validation_record(
-            shot_id, {"frame_set": frame_set}
-        )
-        return validation_record
-
-    @jwt_required
-    def delete(self, shot_id):
-        """
-        Remove the given frame set
-        """
-        shot = shots_service.get_shot(shot_id)
-        user_service.check_project_access(shot["project_id"])
-        user_service.check_entity_access(shot["id"])
-
-        frame_set = self.get_arguments()
-        validation_record = validation_service.create_validation_record(
-            shot_id, {"frame_set": frame_set}, substract=True
-        )
-        return validation_record
-
-    def get_arguments(self):
-        parser = reqparse.RequestParser()
-        parser.add_argument("frame_set", required=True)
-        args = parser.parse_args()
-        return args["frame_set"]
 
 
 class SequenceTasksResource(Resource, ArgsMixin):
@@ -370,12 +334,23 @@ class ProjectShotsResource(Resource):
         """
         Create a shot for given project.
         """
-        (sequence_id, name, data, nb_frames) = self.get_arguments()
+        (
+            sequence_id,
+            name,
+            data,
+            nb_frames,
+            description,
+        ) = self.get_arguments()
         projects_service.get_project(project_id)
         user_service.check_manager_project_access(project_id)
 
         shot = shots_service.create_shot(
-            project_id, sequence_id, name, data=data, nb_frames=nb_frames
+            project_id,
+            sequence_id,
+            name,
+            data=data,
+            nb_frames=nb_frames,
+            description=description,
         )
         return shot, 201
 
@@ -385,12 +360,14 @@ class ProjectShotsResource(Resource):
         parser.add_argument("sequence_id", default=None)
         parser.add_argument("data", type=dict)
         parser.add_argument("nb_frames", default=None, type=int)
+        parser.add_argument("description", default=None)
         args = parser.parse_args()
         return (
             args["sequence_id"],
             args["name"],
             args["data"],
             args["nb_frames"],
+            args["description"],
         )
 
 
@@ -721,12 +698,23 @@ class ShotVersionsResource(Resource):
         user_service.check_entity_access(shot["id"])
         return shots_service.get_shot_versions(shot_id)
 
-class ShotRenderTimeResource(Resource):
+
+class ProjectQuotasResource(Resource, ArgsMixin):
     """
-    Retrieve the render time per frame for the given shot.
-    If the shot does not have any info the info of the sequence is used
+    Retrieve quotas statistics for shots
     """
 
-    def get(self, entity_id):
-        entity = entities_service.get_entity(entity_id)
-        return {"render_time": entities_service.get_entity_render_time(entity)}
+    @jwt_required
+    def get(self, project_id, task_type_id):
+        projects_service.get_project(project_id)
+        user_service.check_project_access(project_id)
+        detail_level = self.get_text_parameter("detail")
+        weighted = self.get_bool_parameter("weighted", default="true")
+        if weighted:
+            return shots_service.get_weighted_quotas(
+                project_id, task_type_id, detail_level
+            )
+        else:
+            return shots_service.get_raw_quotas(
+                project_id, task_type_id, detail_level
+            )

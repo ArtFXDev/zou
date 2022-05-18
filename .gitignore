@@ -98,3 +98,7 @@ release.sh
 
 tmp
 restore.sh
+
+
+#Pycharm
+.idea

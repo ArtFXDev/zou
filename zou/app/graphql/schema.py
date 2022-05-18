@@ -493,24 +493,6 @@ class Query(graphene.ObjectType):
         Person,
         resolver=DefaultResolver(PersonModel),
     )
-    game = graphene.Field(
-        Game,
-        resolver=IDResolver(GameModel),
-        id=graphene.ID(),
-    )
-    games = graphene.List(
-        Game,
-        resolver=DefaultResolver(GameModel),
-    )
-    game_variant = graphene.Field(
-        GameVariant,
-        resolver=IDResolver(GameVariantModel),
-        id=graphene.ID(),
-    )
-    game_variants = graphene.List(
-        GameVariant,
-        resolver=DefaultResolver(GameVariantModel),
-    )
 
 
 schema = graphene.Schema(query=Query, auto_camelcase=False)

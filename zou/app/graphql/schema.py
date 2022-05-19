@@ -6,9 +6,6 @@ from zou.app.models.working_file import WorkingFile as WorkingFileModel
 from zou.app.models.output_type import OutputType as OutputTypeModel
 from zou.app.models.output_file import OutputFile as OutputFileModel
 from zou.app.models.preview_file import PreviewFile as PreviewFileModel
-from zou.app.models.validation_record import (
-    ValidationRecord as ValidationRecordModel,
-)
 from zou.app.models.task_type import TaskType as TaskTypeModel
 from zou.app.models.task_status import TaskStatus as TaskStatusModel
 from zou.app.models.task import Task as TaskModel
@@ -22,9 +19,7 @@ from zou.app.models.attachment_file import (
 from zou.app.models.comment import Comment as CommentModel
 from zou.app.models.department import Department as DepartmentModel
 from zou.app.models.person import Person as PersonModel
-from zou.app.models.gaming import Game as GameModel
-from zou.app.models.gaming import GameVariant as GameVariantModel
-from zou.app.models.gaming import GameScore as GameScoreModel
+
 from zou.app.graphql.resolvers import (
     DefaultResolver,
     IDResolver,
@@ -38,10 +33,8 @@ from zou.app.graphql import converters
 
 from zou.app.services.entities_service import (
     get_entity_type,
-    get_entity_render_time,
 )
 from zou.app.services.shots_service import get_shots
-from zou.app.services.validation_service import get_project_progress
 
 
 class Software(SQLAlchemyObjectType):
@@ -73,11 +66,6 @@ class PreviewFile(SQLAlchemyObjectType):
         resolver=PreviewUrlResolver(lod="originals"),
         lod=graphene.String(required=False),
     )
-
-
-class ValidationRecord(SQLAlchemyObjectType):
-    class Meta:
-        model = ValidationRecordModel
 
 
 class Comment(SQLAlchemyObjectType):
@@ -187,20 +175,6 @@ class Shot(SQLAlchemyObjectType):
             EntityModel,
         ),
     )
-    validation = graphene.Field(
-        ValidationRecord,
-        resolver=DefaultResolver(
-            ValidationRecordModel,
-            "shot_id",
-            query_all=False,
-            order_by="created_at",
-        ),
-    )
-    render_time = graphene.Field(
-        graphene.Int,
-        resolver=FieldResolver(get_entity_render_time, EntityModel),
-    )
-
 
 class Sequence(SQLAlchemyObjectType):
     class Meta:
@@ -214,11 +188,6 @@ class Sequence(SQLAlchemyObjectType):
         graphene.String,
         resolver=lambda root, info: "Sequence",
     )
-    render_time = graphene.Field(
-        graphene.Int,
-        resolver=FieldResolver(get_entity_render_time, EntityModel),
-    )
-
 
 class Asset(SQLAlchemyObjectType):
     class Meta:
@@ -324,21 +293,6 @@ class Person(SQLAlchemyObjectType):
     )
 
 
-class Game(SQLAlchemyObjectType):
-    class Meta:
-        model = GameModel
-
-
-class GameVariant(SQLAlchemyObjectType):
-    class Meta:
-        model = GameVariantModel
-
-
-class GameScore(SQLAlchemyObjectType):
-    class Meta:
-        model = GameScoreModel
-
-
 class Query(graphene.ObjectType):
     software = graphene.Field(
         Software,
@@ -375,15 +329,6 @@ class Query(graphene.ObjectType):
     preview_files = graphene.List(
         PreviewFile,
         resolver=DefaultResolver(PreviewFileModel),
-    )
-    validation_record = graphene.Field(
-        ValidationRecord,
-        resolver=DefaultResolver(ValidationRecord),
-    )
-    validation_records = graphene.List(
-        ValidationRecord,
-        resolver=IDResolver(ValidationRecord),
-        id=graphene.ID(),
     )
     task_type = graphene.Field(
         TaskType,

@@ -59,10 +59,11 @@ def init_data():
     projects_service.get_closed_status()
     print("Project status initialized.")
 
-    assets_service.get_or_create_asset_type("Characters")
-    assets_service.get_or_create_asset_type("Props")
+    assets_service.get_or_create_asset_type("Character")
+    assets_service.get_or_create_asset_type("Prop")
     assets_service.get_or_create_asset_type("Environment")
     assets_service.get_or_create_asset_type("FX")
+    assets_service.get_or_create_asset_type("Vehicule")
     print("Asset types initialized.")
 
     shots_service.get_episode_type()

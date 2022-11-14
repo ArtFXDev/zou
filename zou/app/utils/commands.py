@@ -63,7 +63,7 @@ def init_data():
     assets_service.get_or_create_asset_type("Prop")
     assets_service.get_or_create_asset_type("Environment")
     assets_service.get_or_create_asset_type("FX")
-    assets_service.get_or_create_asset_type("Vehicule")
+    assets_service.get_or_create_asset_type("Vehicle")
     print("Asset types initialized.")
 
     shots_service.get_episode_type()
